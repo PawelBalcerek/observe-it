@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.bundles.spring.boot)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
+    testFixturesApi(libs.bundles.spring.boot)
     testFixturesApi(libs.spring.boot.starter.test)
     testFixturesApi(libs.kotest.assertions.core)
     testFixturesApi(libs.awaitility.kotlin)
