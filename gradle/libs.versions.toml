@@ -12,6 +12,7 @@ awaitility = "4.3.0"
 [libraries]
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
@@ -22,7 +23,8 @@ awaitility-kotlin = { module = "org.awaitility:awaitility-kotlin", version.ref =
 [bundles]
 spring-boot = [
     "spring-boot-starter-web",
-    "spring-boot-starter-actuator"
+    "spring-boot-starter-actuator",
+    "spring-boot-starter-validation"
 ]
 
 [plugins]
