@@ -13,10 +13,18 @@ Uses the default five canonical triage labels (`needs-triage`, `needs-info`, `re
 
 Single-context layout (`CONTEXT.md` and `docs/adr/` at the repo root). See `docs/agents/domain.md`.
 
+### Architecture & packaging
+
+Feature packages split into `api`, `domain`, and `infrastructure` subpackages (`api` → `domain` ← `infrastructure`),
+transport-agnostic cross-cutting context, and lock-free `java.util.concurrent` state over `synchronized`. Read before
+creating or modifying packages, controllers, domain services, adapters, or filters. See `docs/agents/architecture.md`.
+
 ### Testing conventions
 
-Tests are split into unit tests (`src/test/kotlin`) and integration tests (`src/integration/kotlin`), structured with
-`given` / `when` / `then` / `and` blocks. See `docs/agents/testing.md`.
+Unit tests (`src/test/kotlin`), black-box integration tests (`src/integration/kotlin`), and shared fixtures
+(`src/testFixtures/kotlin`) using `given` / `when` / `then` / `and` blocks, minimal-override `*Fixtures` with
+self-describing dummy defaults, `LogCapture` and `*ApiFixture` helpers, fakes over mocks, Kotest assertions, and
+Awaitility. Read before writing or modifying any test or test fixture. See `docs/agents/testing.md`.
 
 ### Code formatting & style (ktlint)
 

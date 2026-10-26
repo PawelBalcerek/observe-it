@@ -6,6 +6,8 @@ paketo-opentelemetry = "2.31.0"
 ktlint = "14.2.0"
 integration-test = "2.2.6"
 junit = "6.1.3"
+kotest = "5.9.1"
+awaitility = "4.3.0"
 
 [libraries]
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
@@ -14,6 +16,8 @@ spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-star
 jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+awaitility-kotlin = { module = "org.awaitility:awaitility-kotlin", version.ref = "awaitility" }
 
 [bundles]
 spring-boot = [

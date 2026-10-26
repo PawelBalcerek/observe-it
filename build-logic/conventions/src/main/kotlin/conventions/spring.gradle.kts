@@ -15,6 +15,7 @@ plugins {
     alias(libs.plugins.spring.dependency.management)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.integration.test)
+    `java-test-fixtures`
 }
 
 group = "com.observeit"
@@ -51,7 +52,9 @@ dependencies {
     implementation(libs.bundles.spring.boot)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
-    testImplementation(libs.spring.boot.starter.test)
+    testFixturesApi(libs.spring.boot.starter.test)
+    testFixturesApi(libs.kotest.assertions.core)
+    testFixturesApi(libs.awaitility.kotlin)
 }
 
 tasks.named<BootBuildImage>("bootBuildImage") {
