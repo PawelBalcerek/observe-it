@@ -6,8 +6,9 @@ Organize code inside each service module by **feature package first**, and split
 
 ```text
 <root-package>
+├── api/                 ← Shared HTTP concerns: GlobalControllerAdvice (@RestControllerAdvice)
 └── <feature>/
-    ├── api/             ← Driving adapters: HTTP controllers, Request/Response DTOs, @RestControllerAdvice
+    ├── api/             ← Driving adapters: HTTP controllers, Request/Response DTOs
     ├── domain/          ← Entities, value objects, ports (interfaces), @Service orchestrators
     └── infrastructure/  ← Driven adapters: persistence (@Repository), external clients, schedulers
 ```
@@ -16,16 +17,17 @@ Organize code inside each service module by **feature package first**, and split
 
 Dependencies point strictly inward toward `domain` (`api` → `domain` ← `infrastructure`):
 
-1. **`<feature>/api` (Driving Adapters)**:
-   - Contains HTTP controllers (`@RestController`), request/response DTOs, and HTTP exception handlers (`@RestControllerAdvice`).
-   - **Thin adapters**: Translate transport requests into `domain` service calls and map domain results or exceptions into HTTP responses and status codes.
-   - Delegate strictly to `@Service` orchestrators in `domain`; keep controllers decoupled from persistence ports (`Repository`), `MDC` manipulation, and domain structured logging.
+1. **`<feature>/api` & Shared `api` (Driving Adapters)**:
+   - **Thin controllers (`@RestController`)**: Validate transport inputs, translate requests into `domain` service calls, and return HTTP responses and status codes. Delegate strictly to `@Service` orchestrators in `domain`; keep controllers decoupled from persistence ports (`Repository`), `MDC` manipulation, and domain structured logging.
+   - **Boundary validation (`@Valid`)**: Validate all request inputs at the `api` boundary using Jakarta Bean Validation annotations (`@field:NotBlank`, `@field:NotEmpty`, `@field:Positive`, `@field:Valid`) and `@AssertTrue` methods on request DTOs for cross-field or format rules (e.g., single currency across items, valid ISO-4217 currency code) so `domain` receives already-valid data.
+   - **DTO ↔ Domain mapping**: Keep mapping inside `api` via `RequestDto.toDomain*()` conversion methods and `ResponseDto.from(domain)` factory methods so `domain` never imports `api` DTOs.
+   - **Global `ProblemDetail` error handling (`api/GlobalControllerAdvice`)**: Centralize `@RestControllerAdvice` in the shared root `api` package returning RFC 7807 `ProblemDetail` responses (attaching validation messages under an `errors` property on `400 Bad Request`). Keep advice handlers limited to exceptions that can actually be thrown, and statically import `HttpStatus` constants (`HttpStatus.BAD_REQUEST`).
 
 2. **`<feature>/domain` (Domain Model & Use-Case Orchestration)**:
-   - **Entities & Value Objects**: Pure Kotlin types that own state transitions, business invariants, and domain calculations. Keep entities free of framework and logging imports.
+   - **Entities & Value Objects**: Pure Kotlin types that own state transitions, business invariants, and domain calculations. Use rich standard value types—`BigDecimal` for monetary amounts and `java.util.Currency` for ISO-4217 currencies—converting to primitives (`Double`, `String`) only at serialization or telemetry boundaries. Keep entities free of framework and logging imports.
    - **Ports**: Pure Kotlin interfaces (e.g., repositories, gateways) defining what the domain requires from driven adapters.
    - **Application Services (`@Service`)**: Coordinate use cases by loading/persisting domain models through ports, updating diagnostic context (`MDC`), and emitting structured logs (`LoggingEventBuilder.addKeyValue`).
-   - Keep `domain` free of transport and web imports (`jakarta.servlet.*`, `org.springframework.web.*`).
+   - Keep `domain` free of transport and web imports (`jakarta.servlet.*`, `org.springframework.web.*`, `jakarta.validation.*`).
 
 3. **`<feature>/infrastructure` (Driven Adapters)**:
    - Contains concrete implementations of `domain` ports (`@Repository` stores, HTTP client adapters, background workers).
