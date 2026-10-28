@@ -5,10 +5,12 @@ import com.observeit.observedapp.order.api.CreateOrderRequest
 import com.observeit.observedapp.order.api.CreateOrderResponse
 import com.observeit.observedapp.order.api.OrderLineItemResponse
 import com.observeit.observedapp.order.api.OrderResponse
+import com.observeit.observedapp.order.api.ReserveOrderResponse
 import com.observeit.observedapp.order.domain.Order
 import com.observeit.observedapp.order.domain.OrderLineItem
 import com.observeit.observedapp.order.domain.OrderState
 import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import java.math.BigDecimal
 import java.util.Currency
 
@@ -59,6 +61,11 @@ object OrderFixtures {
     )
 
     fun aCreateOrderResponse(orderId: String = "id", state: OrderState = CREATED) = CreateOrderResponse(
+        orderId = orderId,
+        state = state,
+    )
+
+    fun aReserveOrderResponse(orderId: String = "id", state: OrderState = RESERVED) = ReserveOrderResponse(
         orderId = orderId,
         state = state,
     )
