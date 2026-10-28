@@ -1,18 +1,18 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Level.INFO
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext
+import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
+import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
+import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderLineItemRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
+import com.observeit.observedapp.order.OrderFixtures.aCreateOrderResponse
 import com.observeit.observedapp.order.api.CreateOrderRequest
 import com.observeit.observedapp.order.api.OrderApiFixture
-import com.observeit.observedapp.order.domain.OrderState
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeValidationError
-import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import org.junit.jupiter.params.ParameterizedTest
@@ -31,37 +31,28 @@ class CreateOrderIntegrationTest : IntegrationTest() {
     @Test
     fun `post orders creates order with 201 Created and emits structured log with key-value pairs and MDC`() {
         // given
-        val request = aCreateOrderRequest(
-            customerId = "cust-42",
-            items = listOf(
-                aCreateOrderLineItemRequest(quantity = 2, unitPrice = BigDecimal("15.50"), currency = "EUR"),
-                aCreateOrderLineItemRequest(quantity = 3, unitPrice = BigDecimal("2.00"), currency = "EUR"),
-            ),
-        )
+        val request = aCreateOrderRequest()
 
         // when
         val response = orderApi.createOrderAndExpect201(request, checkoutScenario = "happy-path")
 
         // then
-        assertSoftly(response) {
-            orderId.shouldNotBeBlank()
-            state shouldBe OrderState.CREATED
-        }
+        response shouldBe aCreateOrderResponse(orderId = response.orderId)
 
         // and
         logCapture.assertLogged(
-            level = Level.INFO,
+            level = INFO,
             message = "Order created",
             keyValues = mapOf(
                 "order.state" to "CREATED",
-                "order.total_amount" to 37.0,
-                "order.currency" to "EUR",
-                "order.item_count" to 5L,
+                "order.total_amount" to 10.0,
+                "order.currency" to "USD",
+                "order.item_count" to 1L,
             ),
             mdc = mapOf(
-                CorrelationContext.CHECKOUT_SCENARIO to "happy-path",
-                CorrelationContext.ORDER_ID to response.orderId,
-                CorrelationContext.CUSTOMER_ID to "cust-42",
+                CHECKOUT_SCENARIO to "happy-path",
+                ORDER_ID to response.orderId,
+                CUSTOMER_ID to "customerId",
             ),
         )
     }

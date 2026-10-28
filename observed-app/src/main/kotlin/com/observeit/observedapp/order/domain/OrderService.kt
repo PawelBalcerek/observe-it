@@ -1,6 +1,7 @@
 package com.observeit.observedapp.order.domain
 
 import com.observeit.observedapp.correlation.CorrelationContext
+import com.observeit.observedapp.order.domain.OrderState.CREATED
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
@@ -17,7 +18,7 @@ class OrderService(private val orderRepository: OrderRepository) {
             id = orderId,
             customerId = customerId,
             items = items,
-            state = OrderState.CREATED,
+            state = CREATED,
         )
 
         val saved = orderRepository.save(order)

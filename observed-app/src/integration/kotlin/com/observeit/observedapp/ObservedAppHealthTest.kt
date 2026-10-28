@@ -1,6 +1,6 @@
 package com.observeit.observedapp
 
-import org.junit.jupiter.api.Assertions.assertEquals
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
 
@@ -23,6 +23,6 @@ class ObservedAppHealthTest : IntegrationTest() {
         // and
         val body = response.expectBody(String::class.java).returnResult().responseBody
         val json = jsonMapper.readTree(body)
-        assertEquals("UP", json.get("status").asString())
+        json.get("status").asString() shouldBe "UP"
     }
 }

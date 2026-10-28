@@ -2,6 +2,7 @@ package com.observeit.observedapp.order.api
 
 import com.observeit.observedapp.correlation.CorrelationContext
 import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
+import com.observeit.observedapp.order.api.OrderMdcInterceptor.Companion.ORDER_ID_PATH_VARIABLE
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
@@ -26,7 +27,7 @@ class OrderMdcInterceptorTest {
         val request = MockHttpServletRequest()
         request.setAttribute(
             URI_TEMPLATE_VARIABLES_ATTRIBUTE,
-            mapOf("orderId" to "ord-42"),
+            mapOf(ORDER_ID_PATH_VARIABLE to "ord-42"),
         )
         val response = MockHttpServletResponse()
 

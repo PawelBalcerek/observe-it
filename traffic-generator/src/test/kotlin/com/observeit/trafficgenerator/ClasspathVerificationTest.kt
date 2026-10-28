@@ -1,7 +1,7 @@
 package com.observeit.trafficgenerator
 
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertThrows
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
 import org.junit.jupiter.api.Test
 import java.io.File
 
@@ -18,10 +18,10 @@ class ClasspathVerificationTest {
         val loadSdk = { Class.forName(sdkClassName) }
 
         // then
-        assertThrows(ClassNotFoundException::class.java) { loadApi() }
+        shouldThrow<ClassNotFoundException> { loadApi() }
 
         // and
-        assertThrows(ClassNotFoundException::class.java) { loadSdk() }
+        shouldThrow<ClassNotFoundException> { loadSdk() }
     }
 
     @Test
@@ -35,9 +35,6 @@ class ClasspathVerificationTest {
             .filter { it.contains("opentelemetry", ignoreCase = true) }
 
         // then
-        assertFalse(
-            otelEntries.isNotEmpty(),
-            "Found unexpected OpenTelemetry dependencies on classpath: $otelEntries",
-        )
+        otelEntries.shouldBeEmpty()
     }
 }
