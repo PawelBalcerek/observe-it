@@ -1,11 +1,15 @@
 package com.observeit.observedapp.order.domain
 
-import ch.qos.logback.classic.Level
-import com.observeit.observedapp.correlation.CorrelationContext
+import ch.qos.logback.classic.Level.INFO
+import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
+import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
+import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
+import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.test.LogCapture
 import io.kotest.assertions.assertSoftly
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
@@ -38,7 +42,7 @@ class OrderServiceTest {
         assertSoftly(order) {
             id.shouldNotBeBlank()
             customerId shouldBe "custom-customer"
-            state shouldBe OrderState.CREATED
+            state shouldBe CREATED
             items.size shouldBe 2
             totalAmount shouldBe BigDecimal("37.00")
             currency shouldBe eur
@@ -51,7 +55,7 @@ class OrderServiceTest {
 
         // and
         logCapture.assertLogged(
-            level = Level.INFO,
+            level = INFO,
             message = "Order created",
             keyValues = mapOf(
                 "order.state" to "CREATED",
@@ -60,9 +64,49 @@ class OrderServiceTest {
                 "order.item_count" to 5L,
             ),
             mdc = mapOf(
-                CorrelationContext.ORDER_ID to order.id,
-                CorrelationContext.CUSTOMER_ID to "custom-customer",
+                ORDER_ID to order.id,
+                CUSTOMER_ID to "custom-customer",
             ),
         )
+    }
+
+    @Test
+    fun `gets order by id, populates customer correlation, and emits structured log`() {
+        // given
+        val existingOrder = repository.save(anOrder())
+
+        // when
+        val order = service.getOrder(existingOrder.id)
+
+        // then
+        order shouldBe existingOrder
+
+        // and
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order retrieved",
+            keyValues = mapOf(
+                "order.state" to "CREATED",
+                "order.total_amount" to 10.0,
+                "order.currency" to "USD",
+                "order.item_count" to 1L,
+            ),
+            mdc = mapOf(
+                ORDER_ID to existingOrder.id,
+                CUSTOMER_ID to existingOrder.customerId,
+            ),
+        )
+    }
+
+    @Test
+    fun `throws OrderNotFoundException when order does not exist`() {
+        // when
+        val exception = shouldThrow<OrderNotFoundException> {
+            service.getOrder("non-existent-id")
+        }
+
+        // then
+        exception.orderId shouldBe "non-existent-id"
+        exception.message shouldBe "Order not found: non-existent-id"
     }
 }

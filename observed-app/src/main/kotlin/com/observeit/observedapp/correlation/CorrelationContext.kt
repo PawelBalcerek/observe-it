@@ -11,6 +11,10 @@ object CorrelationContext {
         MDC.put(CHECKOUT_SCENARIO, scenario)
     }
 
+    fun setOrderId(orderId: String) {
+        MDC.put(ORDER_ID, orderId)
+    }
+
     fun populateOrderCorrelation(orderId: String, customerId: String) {
         MDC.put(ORDER_ID, orderId)
         MDC.put(CUSTOMER_ID, customerId)

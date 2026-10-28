@@ -4,6 +4,7 @@ import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import org.springframework.http.HttpStatus.BAD_REQUEST
+import org.springframework.http.HttpStatus.NOT_FOUND
 import org.springframework.http.ProblemDetail
 
 private const val ERRORS_KEY = "errors"
@@ -20,6 +21,16 @@ fun ProblemDetail.shouldBeValidationError(vararg expectedErrors: String) {
         detail shouldBe VALIDATION_ERROR_DETAIL
         if (expectedErrors.isNotEmpty()) {
             errors shouldContainAll expectedErrors.toList()
+        }
+    }
+}
+
+fun ProblemDetail.shouldBeNotFoundError(expectedDetail: String? = null) {
+    assertSoftly(this) {
+        status shouldBe NOT_FOUND.value()
+        title shouldBe NOT_FOUND.reasonPhrase
+        if (expectedDetail != null) {
+            detail shouldBe expectedDetail
         }
     }
 }
