@@ -67,6 +67,21 @@ class OrderService(private val orderRepository: OrderRepository) {
         return reserved
     }
 
+    fun payOrder(orderId: String, paymentMethod: String): Order {
+        val order = loadOrderWithCorrelation(orderId)
+        val previousState = order.state
+        val paid = orderRepository.save(order.pay())
+
+        logger.atInfo()
+            .addKeyValue("order.state", paid.state.name)
+            .addKeyValue("order.previous_state", previousState.name)
+            .addKeyValue("payment.method", paymentMethod)
+            .addKeyValue("payment.latency_ms", STANDARD_PAYMENT_LATENCY_MS)
+            .log("Order paid")
+
+        return paid
+    }
+
     private fun loadOrderWithCorrelation(orderId: String): Order {
         val order = orderRepository.findById(orderId)
             ?: throw OrderNotFoundException(orderId)
@@ -76,5 +91,6 @@ class OrderService(private val orderRepository: OrderRepository) {
 
     private companion object {
         const val STANDARD_AVAILABLE_QUANTITY = 100L
+        const val STANDARD_PAYMENT_LATENCY_MS = 50L
     }
 }

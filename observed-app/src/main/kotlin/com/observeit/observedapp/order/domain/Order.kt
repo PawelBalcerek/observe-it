@@ -1,6 +1,7 @@
 package com.observeit.observedapp.order.domain
 
 import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import java.math.BigDecimal
 import java.util.Currency
@@ -23,4 +24,6 @@ data class Order(
         get() = items.sumOf { it.quantity.toLong() }
 
     fun reserve(): Order = copy(state = RESERVED)
+
+    fun pay(): Order = copy(state = PAID)
 }

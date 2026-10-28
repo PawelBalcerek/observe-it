@@ -36,4 +36,10 @@ class OrderController(private val orderService: OrderService) {
         val order = orderService.reserveOrder(orderId)
         return ReserveOrderResponse.from(order)
     }
+
+    @PostMapping("/{orderId}/pay")
+    fun payOrder(@PathVariable orderId: String, @RequestBody @Valid request: PayOrderRequest): PayOrderResponse {
+        val order = orderService.payOrder(orderId, request.paymentMethod)
+        return PayOrderResponse.from(order)
+    }
 }
