@@ -5,11 +5,14 @@ import com.observeit.observedapp.order.api.CreateOrderRequest
 import com.observeit.observedapp.order.api.CreateOrderResponse
 import com.observeit.observedapp.order.api.OrderLineItemResponse
 import com.observeit.observedapp.order.api.OrderResponse
+import com.observeit.observedapp.order.api.PayOrderRequest
+import com.observeit.observedapp.order.api.PayOrderResponse
 import com.observeit.observedapp.order.api.ReserveOrderResponse
 import com.observeit.observedapp.order.domain.Order
 import com.observeit.observedapp.order.domain.OrderLineItem
 import com.observeit.observedapp.order.domain.OrderState
 import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import java.math.BigDecimal
 import java.util.Currency
@@ -66,6 +69,15 @@ object OrderFixtures {
     )
 
     fun aReserveOrderResponse(orderId: String = "id", state: OrderState = RESERVED) = ReserveOrderResponse(
+        orderId = orderId,
+        state = state,
+    )
+
+    fun aPayOrderRequest(paymentMethod: String = "paymentMethod") = PayOrderRequest(
+        paymentMethod = paymentMethod,
+    )
+
+    fun aPayOrderResponse(orderId: String = "id", state: OrderState = PAID) = PayOrderResponse(
         orderId = orderId,
         state = state,
     )

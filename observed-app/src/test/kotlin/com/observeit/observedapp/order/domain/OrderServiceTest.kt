@@ -6,6 +6,7 @@ import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
 import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
+import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.test.LogCapture
@@ -162,6 +163,49 @@ class OrderServiceTest {
         // when
         val exception = shouldThrow<OrderNotFoundException> {
             service.reserveOrder("non-existent-id")
+        }
+
+        // then
+        exception.orderId shouldBe "non-existent-id"
+        exception.message shouldBe "Order not found: non-existent-id"
+    }
+
+    @Test
+    fun `pays order, transitions state from RESERVED to PAID, updates repository, and emits structured payment log`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = RESERVED))
+
+        // when
+        val paid = service.payOrder(existingOrder.id, paymentMethod = "CREDIT_CARD")
+
+        // then
+        paid shouldBe anOrder(id = existingOrder.id, state = PAID)
+
+        // and
+        repository.findById(existingOrder.id) shouldBe paid
+
+        // and
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order paid",
+            keyValues = mapOf(
+                "order.state" to "PAID",
+                "order.previous_state" to "RESERVED",
+                "payment.method" to "CREDIT_CARD",
+                "payment.latency_ms" to 50L,
+            ),
+            mdc = mapOf(
+                ORDER_ID to existingOrder.id,
+                CUSTOMER_ID to existingOrder.customerId,
+            ),
+        )
+    }
+
+    @Test
+    fun `throws OrderNotFoundException when paying order that does not exist`() {
+        // when
+        val exception = shouldThrow<OrderNotFoundException> {
+            service.payOrder("non-existent-id", paymentMethod = "CREDIT_CARD")
         }
 
         // then
