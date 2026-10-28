@@ -16,8 +16,9 @@ Single-context layout (`CONTEXT.md` and `docs/adr/` at the repo root). See `docs
 ### Architecture & packaging
 
 Feature packages split into `api`, `domain`, and `infrastructure` subpackages (`api` → `domain` ← `infrastructure`),
-transport-agnostic cross-cutting context, and lock-free `java.util.concurrent` state over `synchronized`. Read before
-creating or modifying packages, controllers, domain services, adapters, or filters. See `docs/agents/architecture.md`.
+transport-agnostic cross-cutting context, lock-free `java.util.concurrent` state over `synchronized`, DTO naming,
+shared exception handling, and static imports. Read before writing or modifying any production code. See
+`docs/agents/architecture.md`.
 
 ### Testing conventions
 
@@ -33,6 +34,7 @@ Ktlint is enforced via `org.jlleitschuh.gradle.ktlint`. Before committing any ch
 
 ### Git & PR workflow
 
-Deliver each ticket on a `feat/<ticket-slug>` or `fix/<ticket-slug>` branch as a single `feat: ...` / `fix: ...` commit
-(amend/rebase on review changes) and a single PR (via `gh pr` or `gh stack`, referencing `Closes #<n>` /
-`Resolves #<n>`), keeping commit messages and PR descriptions up to date. See `CONTRIBUTING.md`.
+Issue-first ticket lifecycle (`feat/`, `fix/` or `retro/<ticket-slug>` branch, single `feat: ...` / `fix: ...` /
+`retro: ...` commit amended on review, PR linking `Closes #<n>` / `Resolves #<n>`, PR review discussion and
+reply-and-resolve loop, and retro rules). Read before starting a ticket, committing, opening a PR, handling PR review
+comments, or running a retro. See `CONTRIBUTING.md`.

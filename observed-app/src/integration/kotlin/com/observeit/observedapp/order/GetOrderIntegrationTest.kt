@@ -7,16 +7,13 @@ import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARI
 import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
 import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
+import com.observeit.observedapp.order.OrderFixtures.anOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
-import com.observeit.observedapp.order.api.OrderLineItemResponse
-import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeNotFoundError
-import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
-import java.math.BigDecimal
 
 class GetOrderIntegrationTest : IntegrationTest() {
 
@@ -35,21 +32,7 @@ class GetOrderIntegrationTest : IntegrationTest() {
         val response = orderApi.getOrderAndExpect200(created.orderId, checkoutScenario = "happy-path")
 
         // then
-        assertSoftly(response) {
-            orderId shouldBe created.orderId
-            customerId shouldBe "customerId"
-            state shouldBe CREATED
-            totalAmount shouldBe BigDecimal("10.00")
-            currency shouldBe "USD"
-            items shouldBe listOf(
-                OrderLineItemResponse(
-                    sku = "sku",
-                    quantity = 1,
-                    unitPrice = BigDecimal("10.00"),
-                    currency = "USD",
-                ),
-            )
-        }
+        response shouldBe anOrderResponse(orderId = created.orderId)
 
         // and
         logCapture.assertLogged(

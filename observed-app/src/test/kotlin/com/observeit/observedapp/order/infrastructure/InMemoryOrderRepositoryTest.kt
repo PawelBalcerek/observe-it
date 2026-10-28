@@ -6,25 +6,24 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit.SECONDS
 
 class InMemoryOrderRepositoryTest {
 
     @Test
     fun `save stores and retrieves order by id`() {
         // given
-        val repository = InMemoryOrderRepository(capacity = 100)
-        val order = anOrder(id = "order-1")
+        val repository = InMemoryOrderRepository()
+        val order = anOrder()
 
         // when
         val saved = repository.save(order)
-        val found = repository.findById("order-1")
+        val found = repository.findById(order.id)
 
         // then
         saved shouldBe order
 
         // and
-        found.shouldNotBeNull()
         found shouldBe order
     }
 
@@ -68,12 +67,12 @@ class InMemoryOrderRepositoryTest {
             executor.submit {
                 for (i in 0 until ordersPerThread) {
                     val orderId = "thread-$t-order-$i"
-                    repository.save(anOrder(id = orderId, customerId = "cust-$t"))
+                    repository.save(anOrder(id = orderId))
                 }
             }
         }
         executor.shutdown()
-        val finished = executor.awaitTermination(5, TimeUnit.SECONDS)
+        val finished = executor.awaitTermination(5, SECONDS)
 
         // then
         finished shouldBe true

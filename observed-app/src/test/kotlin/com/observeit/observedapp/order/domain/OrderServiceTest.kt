@@ -5,17 +5,13 @@ import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
 import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
-import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.test.LogCapture
-import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import java.math.BigDecimal
-import java.util.Currency
 
 class OrderServiceTest {
 
@@ -29,29 +25,19 @@ class OrderServiceTest {
     @Test
     fun `creates order, populates correlation, stores in repository, and emits structured log`() {
         // given
-        val eur = Currency.getInstance("EUR")
         val items = listOf(
-            anOrderLineItem(quantity = 2, unitPrice = BigDecimal("15.50"), currency = eur),
-            anOrderLineItem(quantity = 3, unitPrice = BigDecimal("2.00"), currency = eur),
+            anOrderLineItem(quantity = 2, unitPrice = BigDecimal("15.50")),
+            anOrderLineItem(quantity = 3, unitPrice = BigDecimal("2.00")),
         )
 
         // when
-        val order = service.createOrder(customerId = "custom-customer", items = items)
+        val order = service.createOrder(customerId = "customerId", items = items)
 
         // then
-        assertSoftly(order) {
-            id.shouldNotBeBlank()
-            customerId shouldBe "custom-customer"
-            state shouldBe CREATED
-            items.size shouldBe 2
-            totalAmount shouldBe BigDecimal("37.00")
-            currency shouldBe eur
-            itemCount shouldBe 5L
-        }
+        order shouldBe anOrder(id = order.id, items = items)
 
         // and
-        val stored = repository.findById(order.id)
-        stored shouldBe order
+        repository.findById(order.id) shouldBe order
 
         // and
         logCapture.assertLogged(
@@ -60,12 +46,12 @@ class OrderServiceTest {
             keyValues = mapOf(
                 "order.state" to "CREATED",
                 "order.total_amount" to 37.0,
-                "order.currency" to "EUR",
+                "order.currency" to "USD",
                 "order.item_count" to 5L,
             ),
             mdc = mapOf(
                 ORDER_ID to order.id,
-                CUSTOMER_ID to "custom-customer",
+                CUSTOMER_ID to "customerId",
             ),
         )
     }

@@ -1,5 +1,6 @@
 package com.observeit.observedapp.order.domain
 
+import com.observeit.observedapp.order.domain.OrderState.CREATED
 import java.math.BigDecimal
 import java.util.Currency
 
@@ -7,7 +8,7 @@ data class Order(
     val id: String,
     val customerId: String,
     val items: List<OrderLineItem>,
-    val state: OrderState = OrderState.CREATED,
+    val state: OrderState = CREATED,
 ) {
     val currency: Currency
         get() = items.first().currency

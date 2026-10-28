@@ -27,7 +27,7 @@ Each service module configures three test source sets via `conventions.spring`:
 Define Object Mother factory functions in `src/testFixtures/kotlin` using Kotlin default arguments:
 
 - **Self-describing dummy defaults**: Default string values match their property name (`id: String = "id"`, `name: String = "name"`), constrained string/value types use valid self-explanatory defaults (`currency: String = "USD"`, `currency: Currency = Currency.getInstance("USD")`), and numeric/collection properties use simple constant defaults (`quantity: Int = 1`, `unitPrice: BigDecimal = BigDecimal("10.00")`).
-- **Minimal-override rule**: In test `// given` blocks, invoke fixture functions with their defaults and override **only** the properties directly asserted on in `// then` or required to distinguish multiple instances (e.g., `anItem(id = "item-1")`, `anItem(id = "item-2")`).
+- **Minimal-override rule**: In every test `// given` block (unit and integration alike), invoke fixture functions with their defaults and override **only** the properties directly asserted on in `// then` or required to distinguish multiple instances (e.g., `anItem(id = "item-1")`, `anItem(id = "item-2")`). Assert against the fixture defaults (`customerId shouldBe "customerId"`) and keep shared values (such as a single currency across items) on their default. Keep `// given` shorter than the behavior under test by relying on defaults.
 
 ```kotlin
 object ItemFixtures {
@@ -52,7 +52,7 @@ object ItemFixtures {
 Keep test methods focused on behavior rather than infrastructure plumbing:
 
 - **HTTP API Fixtures (`*ApiFixture`)**: Wrap `RestTestClient` requests and typed DTO serialization in reusable helper classes in `src/testFixtures/kotlin`. Expose status-specific outcome helpers (e.g., `createOrderAndExpect201(request)` returning the response DTO, `createOrderAndExpect400(request)` returning `ProblemDetail`).
-- **`ProblemDetail` Validation Assertions (`ProblemDetailFixtures`)**: Verify `400 Bad Request` validation responses and their `errors` property using `problem.shouldBeValidationError(expectedError)`.
+- **`ProblemDetail` Assertions (`ProblemDetailFixtures`)**: Every error status the API returns has one `ProblemDetail.shouldBe<Status>Error(...)` helper (`shouldBeValidationError(expectedError)` for `400` with its `errors` property, `shouldBeNotFoundError(expectedDetail)` for `404`). Assert error responses only through these helpers, and add the helper alongside the first endpoint that returns a new status.
 - **`LogCapture` Fixture**: Register `LogCapture` via `@JvmField @RegisterExtension` and verify log level, message, structured key-value pairs, and `MDC` entries in a single call with `logCapture.assertLogged(level, message, keyValues, mdc)`. Do not add redundant manual `MDC.get(...)` assertions alongside `assertLogged`.
 
 ## 5. Given / When / Then Structure, Parameterized Validation, Kotest & Awaitility
@@ -60,30 +60,29 @@ Keep test methods focused on behavior rather than infrastructure plumbing:
 - **Explicit `// given`, `// when`, `// then`, `// and` comments**: Structure every `@Test` method with `// given`, `// when`, `// then`, and optional `// and` blocks.
 - **Focused test methods**: Keep each `@Test` focused on a single behavior or scenario outcome so failures point to one cause.
 - **Exhaustive `@ParameterizedTest` with `@FieldSource` for request validation**: Every validation constraint on a request DTO (blank strings, empty collections, non-positive numbers, `@AssertTrue` invariants) must be covered in integration tests using a single `@ParameterizedTest(name = "{0}")` backed by a companion `@FieldSource` list of `Arguments.of(description, invalidRequest, expectedError)`.
-- **Kotest Assertions (`io.kotest:kotest-assertions-core`)**: Use Kotest matchers (`shouldBe`, `shouldNotBeNull`, `shouldNotBeBlank`, `shouldBeInstanceOf`, `shouldContainExactly`, `shouldContainAll`, `shouldThrow`) and `assertSoftly` inside standard JUnit Jupiter test methods.
+- **Kotest Assertions (`io.kotest:kotest-assertions-core`)**: Use Kotest matchers (`shouldBe`, `shouldNotBeNull`, `shouldNotBeBlank`, `shouldBeInstanceOf`, `shouldContainExactly`, `shouldContainAll`, `shouldThrow`) and `assertSoftly` inside standard JUnit Jupiter test methods, in place of JUnit `Assertions.*`.
+- **Whole-value equality**: Assert a response, entity, or list with one `shouldBe` against an expected fixture (`response shouldBe anOrderResponse(orderId = created.orderId)`, `response shouldBe aCreateOrderResponse(orderId = response.orderId)`), passing any generated field (`id`, `orderId`) into the fixture; reserve `assertSoftly` for checking multiple properties of a value that has no fixture.
+- **Static imports**: Follow `docs/agents/architecture.md` §4 (fixture functions, assertion helpers, and constants such as `INFO` or `ORDER_ID`).
 - **Awaitility Kotlin (`org.awaitility:awaitility-kotlin`)**: When verifying asynchronous or concurrent background work, use Awaitility (`await atMost ... untilAsserted { ... }`) instead of `Thread.sleep`.
 
 ```kotlin
 @Test
 fun `creates resource and emits structured log`() {
     // given
-    val request = aCreateResourceRequest(name = "custom-name")
+    val request = aCreateResourceRequest()
 
     // when
     val response = resourceApi.createResourceAndExpect201(request)
 
     // then
-    assertSoftly(response) {
-        id.shouldNotBeBlank()
-        name shouldBe "custom-name"
-    }
+    response shouldBe aCreateResourceResponse(id = response.id)
 
     // and
     logCapture.assertLogged(
-        level = Level.INFO,
+        level = INFO,
         message = "Resource created",
-        keyValues = mapOf("resource.name" to "custom-name"),
-        mdc = mapOf("resource_id" to response.id),
+        keyValues = mapOf("resource.name" to "name"),
+        mdc = mapOf(RESOURCE_ID to response.id),
     )
 }
 ```
