@@ -4,22 +4,10 @@ import com.observeit.observedapp.correlation.api.MdcCorrelationFilter.Companion.
 import org.springframework.http.MediaType.APPLICATION_JSON
 import org.springframework.http.ProblemDetail
 import org.springframework.test.web.servlet.client.RestTestClient
+import org.springframework.test.web.servlet.client.RestTestClient.RequestHeadersSpec
+import org.springframework.test.web.servlet.client.RestTestClient.ResponseSpec
 
 class OrderApiFixture(private val restTestClient: RestTestClient) {
-
-    private fun createOrder(
-        request: CreateOrderRequest,
-        checkoutScenario: String? = null,
-    ): RestTestClient.ResponseSpec {
-        var spec = restTestClient.post()
-            .uri("/api/orders")
-            .contentType(APPLICATION_JSON)
-            .body(request)
-        if (checkoutScenario != null) {
-            spec = spec.header(HEADER_CHECKOUT_SCENARIO, checkoutScenario)
-        }
-        return spec.exchange()
-    }
 
     fun createOrderAndExpect201(request: CreateOrderRequest, checkoutScenario: String? = null): CreateOrderResponse =
         createOrder(request, checkoutScenario)
@@ -35,15 +23,6 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
             .returnResult()
             .responseBody!!
 
-    private fun getOrder(orderId: String, checkoutScenario: String? = null): RestTestClient.ResponseSpec {
-        var spec = restTestClient.get()
-            .uri("/api/orders/{orderId}", orderId)
-        if (checkoutScenario != null) {
-            spec = spec.header(HEADER_CHECKOUT_SCENARIO, checkoutScenario)
-        }
-        return spec.exchange()
-    }
-
     fun getOrderAndExpect200(orderId: String, checkoutScenario: String? = null): OrderResponse =
         getOrder(orderId, checkoutScenario)
             .expectStatus().isOk
@@ -52,9 +31,46 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
             .responseBody!!
 
     fun getOrderAndExpect404(orderId: String, checkoutScenario: String? = null): ProblemDetail =
-        getOrder(orderId, checkoutScenario)
-            .expectStatus().isNotFound
-            .expectBody(ProblemDetail::class.java)
+        getOrder(orderId, checkoutScenario).expectNotFound()
+
+    fun reserveOrderAndExpect200(orderId: String, checkoutScenario: String? = null): ReserveOrderResponse =
+        reserveOrder(orderId, checkoutScenario)
+            .expectStatus().isOk
+            .expectBody(ReserveOrderResponse::class.java)
             .returnResult()
             .responseBody!!
+
+    fun reserveOrderAndExpect404(orderId: String, checkoutScenario: String? = null): ProblemDetail =
+        reserveOrder(orderId, checkoutScenario).expectNotFound()
+
+    private fun createOrder(request: CreateOrderRequest, checkoutScenario: String? = null): ResponseSpec =
+        restTestClient.post()
+            .uri("/api/orders")
+            .contentType(APPLICATION_JSON)
+            .body(request)
+            .withCheckoutScenario(checkoutScenario)
+            .exchange()
+
+    private fun getOrder(orderId: String, checkoutScenario: String? = null): ResponseSpec = restTestClient.get()
+        .uri("/api/orders/{orderId}", orderId)
+        .withCheckoutScenario(checkoutScenario)
+        .exchange()
+
+    private fun reserveOrder(orderId: String, checkoutScenario: String? = null): ResponseSpec = restTestClient.post()
+        .uri("/api/orders/{orderId}/reserve", orderId)
+        .withCheckoutScenario(checkoutScenario)
+        .exchange()
+
+    private fun <S : RequestHeadersSpec<S>> RequestHeadersSpec<S>.withCheckoutScenario(checkoutScenario: String?): S =
+        if (checkoutScenario != null) {
+            header(HEADER_CHECKOUT_SCENARIO, checkoutScenario)
+        } else {
+            @Suppress("UNCHECKED_CAST")
+            this as S
+        }
+
+    private fun ResponseSpec.expectNotFound(): ProblemDetail = expectStatus().isNotFound
+        .expectBody(ProblemDetail::class.java)
+        .returnResult()
+        .responseBody!!
 }

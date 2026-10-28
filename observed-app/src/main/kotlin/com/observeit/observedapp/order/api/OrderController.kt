@@ -30,4 +30,10 @@ class OrderController(private val orderService: OrderService) {
         val order = orderService.getOrder(orderId)
         return OrderResponse.from(order)
     }
+
+    @PostMapping("/{orderId}/reserve")
+    fun reserveOrder(@PathVariable orderId: String): ReserveOrderResponse {
+        val order = orderService.reserveOrder(orderId)
+        return ReserveOrderResponse.from(order)
+    }
 }

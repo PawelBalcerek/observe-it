@@ -13,12 +13,13 @@ import org.junit.jupiter.api.extension.ExtensionContext
 import org.slf4j.Logger.ROOT_LOGGER_NAME
 import org.slf4j.LoggerFactory
 
-class LogCapture(private val loggerName: String = ROOT_LOGGER_NAME) :
+class LogCapture(private val loggerName: String = ROOT_LOGGER_NAME, private val level: Level? = null) :
     BeforeEachCallback,
     AfterEachCallback {
 
     private val targetLogger = LoggerFactory.getLogger(loggerName) as Logger
     private val listAppender = ListAppender<ILoggingEvent>()
+    private var previousLevel: Level? = null
 
     init {
         start()
@@ -26,6 +27,10 @@ class LogCapture(private val loggerName: String = ROOT_LOGGER_NAME) :
 
     private fun start() {
         if (!listAppender.isStarted) {
+            previousLevel = targetLogger.level
+            if (level != null) {
+                targetLogger.level = level
+            }
             listAppender.start()
             targetLogger.addAppender(listAppender)
         }
@@ -35,6 +40,9 @@ class LogCapture(private val loggerName: String = ROOT_LOGGER_NAME) :
         if (listAppender.isStarted) {
             targetLogger.detachAppender(listAppender)
             listAppender.stop()
+            if (level != null) {
+                targetLogger.level = previousLevel
+            }
         }
     }
 
