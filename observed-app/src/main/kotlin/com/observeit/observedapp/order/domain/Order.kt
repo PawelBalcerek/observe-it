@@ -26,13 +26,13 @@ data class Order(
     val itemCount: Long
         get() = items.sumOf { it.quantity.toLong() }
 
-    fun canReserve(): Boolean = state == CREATED
+    private fun canReserve(): Boolean = state == CREATED
 
-    fun canPay(): Boolean = state == RESERVED
+    private fun canPay(): Boolean = state == RESERVED
 
-    fun canShip(): Boolean = state == PAID
+    private fun canShip(): Boolean = state == PAID
 
-    fun canCancel(): Boolean = state == CREATED || state == RESERVED
+    private fun canCancel(): Boolean = state == CREATED || state == RESERVED
 
     fun reserve(): Order {
         if (!canReserve()) {

@@ -29,7 +29,7 @@ class MdcCorrelationFilter : OncePerRequestFilter() {
         }
     }
 
-    companion object {
+    private companion object {
         const val HEADER_CHECKOUT_SCENARIO = "X-Checkout-Scenario"
     }
 }

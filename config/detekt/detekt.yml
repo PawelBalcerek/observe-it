@@ -1,0 +1,34 @@
+complexity:
+  LongMethod:
+    ignoreAnnotated: ['Test', 'ParameterizedTest']
+  LongParameterList:
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    excludes: ['**/test/**', '**/integration/**', '**/testFixtures/**']
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Test', 'ParameterizedTest']
+
+performance:
+  SpreadOperator:
+    excludes: ['**/*Application.kt']
+
+potential-bugs:
+  ElseCaseInsteadOfExhaustiveWhen:
+    active: true
+
+style:
+  AbstractClassCanBeConcreteClass:
+    active: false
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - value: 'java.lang.Thread.sleep'
+        reason: 'Delay with CompletableFuture.delayedExecutor in production code and Awaitility in tests.'
+      - value: 'java.lang.System.currentTimeMillis'
+        reason: 'Measure elapsed time with the monotonic kotlin.time.measureTime.'
+  MagicNumber:
+    excludes: ['**/test/**', '**/integration/**', '**/testFixtures/**']
+  UnusedParameter:
+    ignoreAnnotated: ['ParameterizedTest']

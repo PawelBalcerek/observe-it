@@ -22,7 +22,7 @@ class OrderMdcInterceptor : HandlerInterceptor {
         return true
     }
 
-    companion object {
+    private companion object {
         const val ORDER_ID_PATH_VARIABLE = "orderId"
     }
 }

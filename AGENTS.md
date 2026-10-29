@@ -27,10 +27,9 @@ Unit tests (`src/test/kotlin`), black-box integration tests (`src/integration/ko
 self-describing dummy defaults, `LogCapture` and `*ApiFixture` helpers, fakes over mocks, Kotest assertions, and
 Awaitility. Read before writing or modifying any test or test fixture. See `docs/agents/testing.md`.
 
-### Code formatting & style (ktlint)
+### Code formatting & static analysis (ktlint & detekt)
 
-Ktlint is enforced via `org.jlleitschuh.gradle.ktlint`. Before committing any changes, run `./gradlew ktlintCheck`
-(or `./gradlew check`) and format with `./gradlew ktlintFormat` if needed.
+Ktlint (`org.jlleitschuh.gradle.ktlint`) and Detekt (`dev.detekt`, configured in `config/detekt/detekt.yml`) are wired into `./gradlew check`. Before committing any changes, run `./gradlew check` and format with `./gradlew ktlintFormat` if needed.
 
 ### Git & PR workflow
 

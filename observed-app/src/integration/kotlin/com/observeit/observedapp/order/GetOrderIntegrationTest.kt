@@ -3,9 +3,6 @@ package com.observeit.observedapp.order
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.anOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
@@ -45,9 +42,9 @@ class GetOrderIntegrationTest : IntegrationTest() {
                 "order.item_count" to 1L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "happy-path",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "happy-path",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
     }
@@ -65,8 +62,8 @@ class GetOrderIntegrationTest : IntegrationTest() {
             level = WARN,
             message = "Order not found: non-existent-order",
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "lookup-miss",
-                ORDER_ID to "non-existent-order",
+                "checkout.scenario" to "lookup-miss",
+                "order.id" to "non-existent-order",
             ),
         )
     }

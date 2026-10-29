@@ -5,9 +5,6 @@ import ch.qos.logback.classic.Level.ERROR
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderResponse
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderLineItemRequest
@@ -78,9 +75,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(
@@ -196,9 +193,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(
@@ -306,9 +303,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(
@@ -387,9 +384,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(
@@ -477,9 +474,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(
@@ -568,9 +565,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(
@@ -664,9 +661,9 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
 
         // and
         val expectedMdc = mapOf(
-            CHECKOUT_SCENARIO to checkoutScenario,
-            ORDER_ID to created.orderId,
-            CUSTOMER_ID to "customerId",
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to created.orderId,
+            "customer.id" to "customerId",
         )
 
         logCapture.assertLogged(

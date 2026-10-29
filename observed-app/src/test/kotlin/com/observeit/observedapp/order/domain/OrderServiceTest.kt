@@ -3,8 +3,6 @@ package com.observeit.observedapp.order.domain
 import ch.qos.logback.classic.Level.DEBUG
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.FakePaymentGateway
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
@@ -65,8 +63,8 @@ class OrderServiceTest {
                 "order.item_count" to 5L,
             ),
             mdc = mapOf(
-                ORDER_ID to order.id,
-                CUSTOMER_ID to "customerId",
+                "order.id" to order.id,
+                "customer.id" to "customerId",
             ),
         )
     }
@@ -93,8 +91,8 @@ class OrderServiceTest {
                 "order.item_count" to 1L,
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
     }
@@ -107,8 +105,7 @@ class OrderServiceTest {
         }
 
         // then
-        exception.orderId shouldBe "non-existent-id"
-        exception.message shouldBe "Order not found: non-existent-id"
+        exception shouldBe OrderNotFoundException("non-existent-id")
     }
 
     @Test
@@ -135,8 +132,8 @@ class OrderServiceTest {
                 "inventory.available_quantity" to 100L,
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
 
@@ -149,8 +146,8 @@ class OrderServiceTest {
                 "order.previous_state" to "CREATED",
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
     }
@@ -177,8 +174,8 @@ class OrderServiceTest {
                 "inventory.available_quantity" to 2L,
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
         logEvent.throwableProxy shouldBe null
@@ -242,8 +239,8 @@ class OrderServiceTest {
                 "payment.latency_ms" to 50L,
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
     }
@@ -320,8 +317,8 @@ class OrderServiceTest {
                 "shipping.method" to "STANDARD",
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
     }
@@ -350,8 +347,8 @@ class OrderServiceTest {
                 "cancellation.reason" to "buyer changed mind",
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
     }
@@ -380,8 +377,8 @@ class OrderServiceTest {
                 "cancellation.reason" to "item no longer needed",
             ),
             mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
+                "order.id" to existingOrder.id,
+                "customer.id" to existingOrder.customerId,
             ),
         )
     }
@@ -415,7 +412,7 @@ class OrderServiceTest {
         )
 
         // and
-        repository.findById(existingOrder.id)?.state shouldBe CANCELLED
+        repository.findById(existingOrder.id) shouldBe existingOrder
     }
 
     @Test
@@ -436,7 +433,7 @@ class OrderServiceTest {
         )
 
         // and
-        repository.findById(existingOrder.id)?.state shouldBe CANCELLED
+        repository.findById(existingOrder.id) shouldBe existingOrder
     }
 
     @Test
@@ -457,7 +454,7 @@ class OrderServiceTest {
         )
 
         // and
-        repository.findById(existingOrder.id)?.state shouldBe CANCELLED
+        repository.findById(existingOrder.id) shouldBe existingOrder
     }
 
     @Test
@@ -478,7 +475,7 @@ class OrderServiceTest {
         )
 
         // and
-        repository.findById(existingOrder.id)?.state shouldBe SHIPPED
+        repository.findById(existingOrder.id) shouldBe existingOrder
     }
 
     @Test

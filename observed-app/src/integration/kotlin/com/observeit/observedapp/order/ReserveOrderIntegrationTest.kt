@@ -4,9 +4,6 @@ import ch.qos.logback.classic.Level.DEBUG
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderLineItemRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aReserveOrderResponse
@@ -50,9 +47,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
                 "inventory.available_quantity" to 100L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "happy-path",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "happy-path",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logCapture.assertLogged(
@@ -63,9 +60,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
                 "order.previous_state" to "CREATED",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "happy-path",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "happy-path",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
     }
@@ -93,9 +90,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
                 "inventory.available_quantity" to 2L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "low-stock",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "low-stock",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logEvent.throwableProxy shouldBe null
@@ -114,8 +111,8 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
             level = WARN,
             message = "Order not found: non-existent-order",
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "reserve-miss",
-                ORDER_ID to "non-existent-order",
+                "checkout.scenario" to "reserve-miss",
+                "order.id" to "non-existent-order",
             ),
         )
     }
@@ -145,9 +142,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
                 "order.attempted_action" to "reserve",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "invalid-transition",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "invalid-transition",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logEvent.throwableProxy shouldBe null
@@ -181,9 +178,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
                 "inventory.available_quantity" to 0L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "out-of-stock",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "out-of-stock",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logEvent.throwableProxy shouldBe null

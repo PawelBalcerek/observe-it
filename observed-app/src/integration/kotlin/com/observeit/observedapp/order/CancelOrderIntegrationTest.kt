@@ -3,9 +3,6 @@ package com.observeit.observedapp.order
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderResponse
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
@@ -56,9 +53,9 @@ class CancelOrderIntegrationTest : IntegrationTest() {
                 "cancellation.reason" to "buyer changed mind",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "buyer-cancellation",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "buyer-cancellation",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
     }
@@ -89,9 +86,9 @@ class CancelOrderIntegrationTest : IntegrationTest() {
                 "cancellation.reason" to "item no longer needed",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "buyer-cancellation",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "buyer-cancellation",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
     }
@@ -123,8 +120,8 @@ class CancelOrderIntegrationTest : IntegrationTest() {
             level = WARN,
             message = "Order not found: non-existent-order",
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "cancel-miss",
-                ORDER_ID to "non-existent-order",
+                "checkout.scenario" to "cancel-miss",
+                "order.id" to "non-existent-order",
             ),
         )
     }
@@ -160,9 +157,9 @@ class CancelOrderIntegrationTest : IntegrationTest() {
                 "order.attempted_action" to "cancel",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "invalid-transition",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "invalid-transition",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logEvent.throwableProxy shouldBe null

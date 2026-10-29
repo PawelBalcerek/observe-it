@@ -49,10 +49,7 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
     fun reserveOrder(orderId: String): Order {
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
-
-        if (!order.canReserve()) {
-            throw InvalidOrderStateTransitionException(orderId, order.state, "reserve")
-        }
+        val reserved = order.reserve()
 
         val outOfStockItem = order.items.firstOrNull { it.sku == SKU_OUT_OF_STOCK }
         if (outOfStockItem != null) {
@@ -64,7 +61,7 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
             )
         }
 
-        val reserved = orderRepository.save(order.reserve())
+        orderRepository.save(reserved)
 
         reserved.items.forEach { item ->
             if (item.sku == SKU_LOW_STOCK) {
@@ -93,19 +90,13 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
     fun payOrder(orderId: String, paymentMethod: PaymentMethod): Order {
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
+        val paid = order.pay()
 
-        if (!order.canPay()) {
-            throw InvalidOrderStateTransitionException(orderId, order.state, "pay")
-        }
+        runCatching { paymentGateway.processPayment(order.id, order.totalAmount, order.currency, paymentMethod) }
+            .onFailure { orderRepository.save(order.fail()) }
+            .getOrThrow()
 
-        try {
-            paymentGateway.processPayment(order.id, order.totalAmount, order.currency, paymentMethod)
-        } catch (e: Exception) {
-            orderRepository.save(order.fail())
-            throw e
-        }
-
-        val paid = orderRepository.save(order.pay())
+        orderRepository.save(paid)
 
         logger.atInfo()
             .addKeyValue("order.state", paid.state.name)

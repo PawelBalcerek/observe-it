@@ -16,13 +16,13 @@ class OrderTest {
     @Test
     fun `reserves order when state is CREATED`() {
         // given
-        val order = anOrder(state = CREATED)
+        val order = anOrder()
 
         // when
         val reserved = order.reserve()
 
         // then
-        reserved.state shouldBe RESERVED
+        reserved shouldBe anOrder(state = RESERVED)
     }
 
     @Test
@@ -36,9 +36,11 @@ class OrderTest {
         }
 
         // then
-        exception.orderId shouldBe order.id
-        exception.state shouldBe RESERVED
-        exception.attemptedAction shouldBe "reserve"
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = order.id,
+            state = RESERVED,
+            attemptedAction = "reserve",
+        )
     }
 
     @Test
@@ -50,13 +52,13 @@ class OrderTest {
         val paid = order.pay()
 
         // then
-        paid.state shouldBe PAID
+        paid shouldBe anOrder(state = PAID)
     }
 
     @Test
     fun `throws InvalidOrderStateTransitionException when paying order in non-RESERVED state`() {
         // given
-        val order = anOrder(state = CREATED)
+        val order = anOrder()
 
         // when
         val exception = shouldThrow<InvalidOrderStateTransitionException> {
@@ -64,9 +66,11 @@ class OrderTest {
         }
 
         // then
-        exception.orderId shouldBe order.id
-        exception.state shouldBe CREATED
-        exception.attemptedAction shouldBe "pay"
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = order.id,
+            state = CREATED,
+            attemptedAction = "pay",
+        )
     }
 
     @Test
@@ -78,13 +82,13 @@ class OrderTest {
         val shipped = order.ship()
 
         // then
-        shipped.state shouldBe SHIPPED
+        shipped shouldBe anOrder(state = SHIPPED)
     }
 
     @Test
     fun `throws InvalidOrderStateTransitionException when shipping order in non-PAID state`() {
         // given
-        val order = anOrder(state = CREATED)
+        val order = anOrder()
 
         // when
         val exception = shouldThrow<InvalidOrderStateTransitionException> {
@@ -92,21 +96,23 @@ class OrderTest {
         }
 
         // then
-        exception.orderId shouldBe order.id
-        exception.state shouldBe CREATED
-        exception.attemptedAction shouldBe "ship"
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = order.id,
+            state = CREATED,
+            attemptedAction = "ship",
+        )
     }
 
     @Test
     fun `cancels order when state is CREATED`() {
         // given
-        val order = anOrder(state = CREATED)
+        val order = anOrder()
 
         // when
         val cancelled = order.cancel()
 
         // then
-        cancelled.state shouldBe CANCELLED
+        cancelled shouldBe anOrder(state = CANCELLED)
     }
 
     @Test
@@ -118,7 +124,7 @@ class OrderTest {
         val cancelled = order.cancel()
 
         // then
-        cancelled.state shouldBe CANCELLED
+        cancelled shouldBe anOrder(state = CANCELLED)
     }
 
     @Test
@@ -132,20 +138,22 @@ class OrderTest {
         }
 
         // then
-        exception.orderId shouldBe order.id
-        exception.state shouldBe SHIPPED
-        exception.attemptedAction shouldBe "cancel"
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = order.id,
+            state = SHIPPED,
+            attemptedAction = "cancel",
+        )
     }
 
     @Test
     fun `fails order transitions state to FAILED`() {
         // given
-        val order = anOrder(state = CREATED)
+        val order = anOrder()
 
         // when
         val failed = order.fail()
 
         // then
-        failed.state shouldBe FAILED
+        failed shouldBe anOrder(state = FAILED)
     }
 }

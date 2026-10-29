@@ -4,9 +4,6 @@ import ch.qos.logback.classic.Level.ERROR
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderResponse
@@ -64,9 +61,9 @@ class PayOrderIntegrationTest : IntegrationTest() {
                 "payment.latency_ms" to 50L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "happy-path",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "happy-path",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
     }
@@ -98,8 +95,8 @@ class PayOrderIntegrationTest : IntegrationTest() {
             level = WARN,
             message = "Order not found: non-existent-order",
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "pay-miss",
-                ORDER_ID to "non-existent-order",
+                "checkout.scenario" to "pay-miss",
+                "order.id" to "non-existent-order",
             ),
         )
     }
@@ -133,9 +130,9 @@ class PayOrderIntegrationTest : IntegrationTest() {
                 "order.attempted_action" to "pay",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "invalid-transition",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "invalid-transition",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logEvent.throwableProxy shouldBe null
@@ -171,9 +168,9 @@ class PayOrderIntegrationTest : IntegrationTest() {
                 "payment.latency_ms" to 50L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "payment-declined",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "payment-declined",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         logEvent.throwableProxy shouldBe null
@@ -208,9 +205,9 @@ class PayOrderIntegrationTest : IntegrationTest() {
                 "payment.method" to "TIMEOUT_GATEWAY",
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "gateway-timeout",
-                ORDER_ID to created.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "gateway-timeout",
+                "order.id" to created.orderId,
+                "customer.id" to "customerId",
             ),
         )
         val latencyMs = logEvent.keyValuePairs.first { it.key == "payment.latency_ms" }.value as Long

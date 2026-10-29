@@ -1,5 +1,5 @@
 ---
-name: respond-to-review
+name: respond-to-pr-comments
 description: "Respond to PR review comments, apply agreed fixes, and reply to and resolve review threads."
 disable-model-invocation: true
 ---
@@ -31,7 +31,13 @@ resolved** while threads still under discussion stay open.
 2. **Discuss in chat.** Present a concise response for each unresolved thread in chat: state whether you agree with the
    comment, propose the concrete fix (or an alternative, or push back with reasons), and stop to wait for the human's
    reply. Iterate in chat until every thread has an agreed outcome: _fix_, _drop_ (agreed not to change, with the
-   reason), or _open_ (keep discussing later). Done when the human explicitly confirms the plan in chat.
+   reason), or _open_ (keep discussing later).
+
+   Classify every human reply. An **approval** is a bare yes to the whole plan as last presented ("good", "ok", "yes",
+   "go ahead", "I accept"). Anything else is an **amendment**: a suggestion, question, condition, alternative, "wdyt",
+   or "yes, but…", even when the rest of the reply approves. On an amendment, fold it into the plan, restate the full
+   amended plan (every thread, not just the changed ones), ask whether we are on the same page, and wait. This step
+   edits no files. Done when the human's latest reply is an approval of the plan exactly as last restated.
 
 3. **Fix & push.** Implement every _fix_ outcome, run `./gradlew check`, run the `code-review` skill on the branch,
    amend the single commit (`git commit --amend`, keeping the commit message accurate), and `git push --force-with-lease`.

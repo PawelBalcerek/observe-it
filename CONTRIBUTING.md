@@ -50,7 +50,7 @@ Each stage ends when its completion criterion holds.
    _Ticket-driven delivery_ and the `pr` skill). Done when `./gradlew check` is green and the PR is open and links the
    issue.
 2. **Human review** _(human)_: the human leaves review comments on the PR.
-3. **Respond to review** _(`/respond-to-review`)_: run the `respond-to-review` skill to align on a fix plan in chat,
+3. **Respond to PR comments** _(`/respond-to-pr-comments`)_: run the `respond-to-pr-comments` skill to align on a fix plan in chat,
    amend and push the agreed fixes, and reply to and resolve each agreed review thread. Done when the remote PR is
    updated and every agreed thread is replied to and resolved.
 4. Repeat from step 2 until the human merges.
