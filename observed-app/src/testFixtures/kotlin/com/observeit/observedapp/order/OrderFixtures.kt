@@ -1,5 +1,7 @@
 package com.observeit.observedapp.order
 
+import com.observeit.observedapp.order.api.CancelOrderRequest
+import com.observeit.observedapp.order.api.CancelOrderResponse
 import com.observeit.observedapp.order.api.CreateOrderLineItemRequest
 import com.observeit.observedapp.order.api.CreateOrderRequest
 import com.observeit.observedapp.order.api.CreateOrderResponse
@@ -13,6 +15,7 @@ import com.observeit.observedapp.order.api.ShipOrderResponse
 import com.observeit.observedapp.order.domain.Order
 import com.observeit.observedapp.order.domain.OrderLineItem
 import com.observeit.observedapp.order.domain.OrderState
+import com.observeit.observedapp.order.domain.OrderState.CANCELLED
 import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
@@ -94,6 +97,15 @@ object OrderFixtures {
     )
 
     fun aShipOrderResponse(orderId: String = "id", state: OrderState = SHIPPED) = ShipOrderResponse(
+        orderId = orderId,
+        state = state,
+    )
+
+    fun aCancelOrderRequest(reason: String? = "reason") = CancelOrderRequest(
+        reason = reason,
+    )
+
+    fun aCancelOrderResponse(orderId: String = "id", state: OrderState = CANCELLED) = CancelOrderResponse(
         orderId = orderId,
         state = state,
     )

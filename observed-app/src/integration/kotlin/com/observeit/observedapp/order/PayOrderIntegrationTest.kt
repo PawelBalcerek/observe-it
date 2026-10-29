@@ -1,5 +1,6 @@
 package com.observeit.observedapp.order
 
+import ch.qos.logback.classic.Level.ERROR
 import ch.qos.logback.classic.Level.INFO
 import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
@@ -11,9 +12,17 @@ import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.PayOrderRequest
+import com.observeit.observedapp.order.domain.OrderState.CANCELLED
+import com.observeit.observedapp.order.domain.OrderState.FAILED
+import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
+import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
 import com.observeit.observedapp.test.LogCapture
+import com.observeit.observedapp.test.shouldBeConflictError
+import com.observeit.observedapp.test.shouldBeGatewayTimeoutError
 import com.observeit.observedapp.test.shouldBeNotFoundError
+import com.observeit.observedapp.test.shouldBeUnprocessableEntityError
 import com.observeit.observedapp.test.shouldBeValidationError
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -62,6 +71,20 @@ class PayOrderIntegrationTest : IntegrationTest() {
         )
     }
 
+    @ParameterizedTest(name = "{0}")
+    @FieldSource("invalidPayRequests")
+    fun `post pay returns 400 Bad Request when request validation fails`(
+        description: String,
+        request: PayOrderRequest,
+        expectedError: String,
+    ) {
+        // when
+        val problem = orderApi.payOrderAndExpect400("any-order-id", request)
+
+        // then
+        problem.shouldBeValidationError(expectedError)
+    }
+
     @Test
     fun `post pay returns 404 Not Found when order does not exist and logs warning with MDC correlation`() {
         // when
@@ -81,18 +104,118 @@ class PayOrderIntegrationTest : IntegrationTest() {
         )
     }
 
-    @ParameterizedTest(name = "{0}")
-    @FieldSource("invalidPayRequests")
-    fun `post pay returns 400 Bad Request when request validation fails`(
-        description: String,
-        request: PayOrderRequest,
-        expectedError: String,
-    ) {
+    @Test
+    fun `post pay returns 409 Conflict and logs warning when order state is not RESERVED`() {
+        // given
+        val created = orderApi.createOrderAndExpect201(aCreateOrderRequest())
+        orderApi.cancelOrderAndExpect200(created.orderId)
+
         // when
-        val problem = orderApi.payOrderAndExpect400("any-order-id", request)
+        val problem = orderApi.payOrderAndExpect409(
+            orderId = created.orderId,
+            request = aPayOrderRequest(),
+            checkoutScenario = "invalid-transition",
+        )
 
         // then
-        problem.shouldBeValidationError(expectedError)
+        problem.shouldBeConflictError("Cannot pay order ${created.orderId} in CANCELLED state")
+
+        // and
+        val order = orderApi.getOrderAndExpect200(created.orderId)
+        order.state shouldBe CANCELLED
+
+        // and
+        val logEvent = logCapture.assertLogged(
+            level = WARN,
+            message = "Cannot pay order in CANCELLED state",
+            keyValues = mapOf(
+                "error.type" to "INVALID_STATE_TRANSITION",
+                "order.attempted_action" to "pay",
+            ),
+            mdc = mapOf(
+                CHECKOUT_SCENARIO to "invalid-transition",
+                ORDER_ID to created.orderId,
+                CUSTOMER_ID to "customerId",
+            ),
+        )
+        logEvent.throwableProxy shouldBe null
+    }
+
+    @Test
+    fun `post pay returns 422 Unprocessable Entity and logs warning when payment method is DECLINED_CARD`() {
+        // given
+        val created = orderApi.createOrderAndExpect201(aCreateOrderRequest())
+        orderApi.reserveOrderAndExpect200(created.orderId)
+
+        // when
+        val problem = orderApi.payOrderAndExpect422(
+            orderId = created.orderId,
+            request = aPayOrderRequest(paymentMethod = DECLINED_CARD),
+            checkoutScenario = "payment-declined",
+        )
+
+        // then
+        problem.shouldBeUnprocessableEntityError("Payment declined for method DECLINED_CARD")
+
+        // and
+        val order = orderApi.getOrderAndExpect200(created.orderId)
+        order.state shouldBe FAILED
+
+        // and
+        val logEvent = logCapture.assertLogged(
+            level = WARN,
+            message = "Payment declined for method DECLINED_CARD",
+            keyValues = mapOf(
+                "error.type" to "PAYMENT_DECLINED",
+                "payment.method" to "DECLINED_CARD",
+                "payment.latency_ms" to 50L,
+            ),
+            mdc = mapOf(
+                CHECKOUT_SCENARIO to "payment-declined",
+                ORDER_ID to created.orderId,
+                CUSTOMER_ID to "customerId",
+            ),
+        )
+        logEvent.throwableProxy shouldBe null
+    }
+
+    @Test
+    fun `post pay returns 504 Gateway Timeout and logs error when payment method is TIMEOUT_GATEWAY`() {
+        // given
+        val created = orderApi.createOrderAndExpect201(aCreateOrderRequest())
+        orderApi.reserveOrderAndExpect200(created.orderId)
+
+        // when
+        val problem = orderApi.payOrderAndExpect504(
+            orderId = created.orderId,
+            request = aPayOrderRequest(paymentMethod = TIMEOUT_GATEWAY),
+            checkoutScenario = "gateway-timeout",
+        )
+
+        // then
+        problem.shouldBeGatewayTimeoutError("Payment gateway timed out")
+
+        // and
+        val order = orderApi.getOrderAndExpect200(created.orderId)
+        order.state shouldBe FAILED
+
+        // and
+        val logEvent = logCapture.assertLogged(
+            level = ERROR,
+            message = "Payment gateway timed out for method TIMEOUT_GATEWAY",
+            keyValues = mapOf(
+                "error.type" to "GATEWAY_TIMEOUT",
+                "payment.method" to "TIMEOUT_GATEWAY",
+            ),
+            mdc = mapOf(
+                CHECKOUT_SCENARIO to "gateway-timeout",
+                ORDER_ID to created.orderId,
+                CUSTOMER_ID to "customerId",
+            ),
+        )
+        val latencyMs = logEvent.keyValuePairs.first { it.key == "payment.latency_ms" }.value as Long
+        (latencyMs >= 1000L) shouldBe true
+        logEvent.throwableProxy.shouldNotBeNull()
     }
 
     companion object {

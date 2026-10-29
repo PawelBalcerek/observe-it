@@ -11,7 +11,9 @@ import com.observeit.observedapp.order.OrderFixtures.aShipOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aShipOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.ShipOrderRequest
+import com.observeit.observedapp.order.domain.OrderState.CANCELLED
 import com.observeit.observedapp.test.LogCapture
+import com.observeit.observedapp.test.shouldBeConflictError
 import com.observeit.observedapp.test.shouldBeNotFoundError
 import com.observeit.observedapp.test.shouldBeValidationError
 import io.kotest.matchers.shouldBe
@@ -62,6 +64,20 @@ class ShipOrderIntegrationTest : IntegrationTest() {
         )
     }
 
+    @ParameterizedTest(name = "{0}")
+    @FieldSource("invalidShipRequests")
+    fun `post ship returns 400 Bad Request when request validation fails`(
+        description: String,
+        request: ShipOrderRequest,
+        expectedError: String,
+    ) {
+        // when
+        val problem = orderApi.shipOrderAndExpect400("any-order-id", request)
+
+        // then
+        problem.shouldBeValidationError(expectedError)
+    }
+
     @Test
     fun `post ship returns 404 Not Found when order does not exist and logs warning with MDC correlation`() {
         // when
@@ -81,18 +97,41 @@ class ShipOrderIntegrationTest : IntegrationTest() {
         )
     }
 
-    @ParameterizedTest(name = "{0}")
-    @FieldSource("invalidShipRequests")
-    fun `post ship returns 400 Bad Request when request validation fails`(
-        description: String,
-        request: ShipOrderRequest,
-        expectedError: String,
-    ) {
+    @Test
+    fun `post ship returns 409 Conflict and logs warning when order state is not PAID`() {
+        // given
+        val created = orderApi.createOrderAndExpect201(aCreateOrderRequest())
+        orderApi.cancelOrderAndExpect200(created.orderId)
+
         // when
-        val problem = orderApi.shipOrderAndExpect400("any-order-id", request)
+        val problem = orderApi.shipOrderAndExpect409(
+            orderId = created.orderId,
+            request = aShipOrderRequest(),
+            checkoutScenario = "invalid-transition",
+        )
 
         // then
-        problem.shouldBeValidationError(expectedError)
+        problem.shouldBeConflictError("Cannot ship order ${created.orderId} in CANCELLED state")
+
+        // and
+        val order = orderApi.getOrderAndExpect200(created.orderId)
+        order.state shouldBe CANCELLED
+
+        // and
+        val logEvent = logCapture.assertLogged(
+            level = WARN,
+            message = "Cannot ship order in CANCELLED state",
+            keyValues = mapOf(
+                "error.type" to "INVALID_STATE_TRANSITION",
+                "order.attempted_action" to "ship",
+            ),
+            mdc = mapOf(
+                CHECKOUT_SCENARIO to "invalid-transition",
+                ORDER_ID to created.orderId,
+                CUSTOMER_ID to "customerId",
+            ),
+        )
+        logEvent.throwableProxy shouldBe null
     }
 
     companion object {
