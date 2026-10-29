@@ -2,6 +2,7 @@ package com.observeit.observedapp.order.api
 
 import com.observeit.observedapp.correlation.api.MdcCorrelationFilter.Companion.HEADER_CHECKOUT_SCENARIO
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
+import com.observeit.observedapp.order.OrderFixtures.aShipOrderRequest
 import org.springframework.http.MediaType.APPLICATION_JSON
 import org.springframework.http.ProblemDetail
 import org.springframework.test.web.servlet.client.RestTestClient
@@ -70,6 +71,32 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         .returnResult()
         .responseBody!!
 
+    fun shipOrderAndExpect200(
+        orderId: String,
+        request: ShipOrderRequest = aShipOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ShipOrderResponse = shipOrder(orderId, request, checkoutScenario)
+        .expectStatus().isOk
+        .expectBody(ShipOrderResponse::class.java)
+        .returnResult()
+        .responseBody!!
+
+    fun shipOrderAndExpect404(
+        orderId: String,
+        request: ShipOrderRequest = aShipOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = shipOrder(orderId, request, checkoutScenario).expectNotFound()
+
+    fun shipOrderAndExpect400(
+        orderId: String,
+        request: ShipOrderRequest,
+        checkoutScenario: String? = null,
+    ): ProblemDetail = shipOrder(orderId, request, checkoutScenario)
+        .expectStatus().isBadRequest
+        .expectBody(ProblemDetail::class.java)
+        .returnResult()
+        .responseBody!!
+
     private fun createOrder(request: CreateOrderRequest, checkoutScenario: String? = null): ResponseSpec =
         restTestClient.post()
             .uri("/api/orders")
@@ -91,6 +118,14 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
     private fun payOrder(orderId: String, request: PayOrderRequest, checkoutScenario: String? = null): ResponseSpec =
         restTestClient.post()
             .uri("/api/orders/{orderId}/pay", orderId)
+            .contentType(APPLICATION_JSON)
+            .body(request)
+            .withCheckoutScenario(checkoutScenario)
+            .exchange()
+
+    private fun shipOrder(orderId: String, request: ShipOrderRequest, checkoutScenario: String? = null): ResponseSpec =
+        restTestClient.post()
+            .uri("/api/orders/{orderId}/ship", orderId)
             .contentType(APPLICATION_JSON)
             .body(request)
             .withCheckoutScenario(checkoutScenario)

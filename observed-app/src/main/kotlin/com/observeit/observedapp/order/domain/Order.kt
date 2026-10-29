@@ -3,6 +3,7 @@ package com.observeit.observedapp.order.domain
 import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
+import com.observeit.observedapp.order.domain.OrderState.SHIPPED
 import java.math.BigDecimal
 import java.util.Currency
 
@@ -26,4 +27,6 @@ data class Order(
     fun reserve(): Order = copy(state = RESERVED)
 
     fun pay(): Order = copy(state = PAID)
+
+    fun ship(): Order = copy(state = SHIPPED)
 }

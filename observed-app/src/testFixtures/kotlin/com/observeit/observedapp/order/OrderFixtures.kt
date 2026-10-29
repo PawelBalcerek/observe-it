@@ -8,12 +8,19 @@ import com.observeit.observedapp.order.api.OrderResponse
 import com.observeit.observedapp.order.api.PayOrderRequest
 import com.observeit.observedapp.order.api.PayOrderResponse
 import com.observeit.observedapp.order.api.ReserveOrderResponse
+import com.observeit.observedapp.order.api.ShipOrderRequest
+import com.observeit.observedapp.order.api.ShipOrderResponse
 import com.observeit.observedapp.order.domain.Order
 import com.observeit.observedapp.order.domain.OrderLineItem
 import com.observeit.observedapp.order.domain.OrderState
 import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
+import com.observeit.observedapp.order.domain.OrderState.SHIPPED
+import com.observeit.observedapp.order.domain.PaymentMethod
+import com.observeit.observedapp.order.domain.PaymentMethod.CREDIT_CARD
+import com.observeit.observedapp.order.domain.ShippingMethod
+import com.observeit.observedapp.order.domain.ShippingMethod.STANDARD
 import java.math.BigDecimal
 import java.util.Currency
 
@@ -73,11 +80,20 @@ object OrderFixtures {
         state = state,
     )
 
-    fun aPayOrderRequest(paymentMethod: String = "paymentMethod") = PayOrderRequest(
+    fun aPayOrderRequest(paymentMethod: PaymentMethod? = CREDIT_CARD) = PayOrderRequest(
         paymentMethod = paymentMethod,
     )
 
     fun aPayOrderResponse(orderId: String = "id", state: OrderState = PAID) = PayOrderResponse(
+        orderId = orderId,
+        state = state,
+    )
+
+    fun aShipOrderRequest(shippingMethod: ShippingMethod? = STANDARD) = ShipOrderRequest(
+        shippingMethod = shippingMethod,
+    )
+
+    fun aShipOrderResponse(orderId: String = "id", state: OrderState = SHIPPED) = ShipOrderResponse(
         orderId = orderId,
         state = state,
     )

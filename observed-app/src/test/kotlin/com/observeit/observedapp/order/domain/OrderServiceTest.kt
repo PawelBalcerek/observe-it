@@ -8,6 +8,9 @@ import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
 import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
+import com.observeit.observedapp.order.domain.OrderState.SHIPPED
+import com.observeit.observedapp.order.domain.PaymentMethod.CREDIT_CARD
+import com.observeit.observedapp.order.domain.ShippingMethod.STANDARD
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.test.LogCapture
 import io.kotest.assertions.throwables.shouldThrow
@@ -176,7 +179,7 @@ class OrderServiceTest {
         val existingOrder = repository.save(anOrder(state = RESERVED))
 
         // when
-        val paid = service.payOrder(existingOrder.id, paymentMethod = "CREDIT_CARD")
+        val paid = service.payOrder(existingOrder.id, paymentMethod = CREDIT_CARD)
 
         // then
         paid shouldBe anOrder(id = existingOrder.id, state = PAID)
@@ -205,7 +208,49 @@ class OrderServiceTest {
     fun `throws OrderNotFoundException when paying order that does not exist`() {
         // when
         val exception = shouldThrow<OrderNotFoundException> {
-            service.payOrder("non-existent-id", paymentMethod = "CREDIT_CARD")
+            service.payOrder("non-existent-id", paymentMethod = CREDIT_CARD)
+        }
+
+        // then
+        exception.orderId shouldBe "non-existent-id"
+        exception.message shouldBe "Order not found: non-existent-id"
+    }
+
+    @Test
+    fun `ships order, transitions state from PAID to SHIPPED, updates repository, and emits structured shipping log`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = PAID))
+
+        // when
+        val shipped = service.shipOrder(existingOrder.id, shippingMethod = STANDARD)
+
+        // then
+        shipped shouldBe anOrder(id = existingOrder.id, state = SHIPPED)
+
+        // and
+        repository.findById(existingOrder.id) shouldBe shipped
+
+        // and
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order shipped",
+            keyValues = mapOf(
+                "order.state" to "SHIPPED",
+                "order.previous_state" to "PAID",
+                "shipping.method" to "STANDARD",
+            ),
+            mdc = mapOf(
+                ORDER_ID to existingOrder.id,
+                CUSTOMER_ID to existingOrder.customerId,
+            ),
+        )
+    }
+
+    @Test
+    fun `throws OrderNotFoundException when shipping order that does not exist`() {
+        // when
+        val exception = shouldThrow<OrderNotFoundException> {
+            service.shipOrder("non-existent-id", shippingMethod = STANDARD)
         }
 
         // then
