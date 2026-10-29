@@ -36,7 +36,7 @@ class InMemoryOrderRepository(
         }
     }
 
-    companion object {
+    private companion object {
         const val DEFAULT_CAPACITY = 10_000
     }
 }

@@ -1,10 +1,6 @@
 package com.observeit.observedapp.correlation.api
 
 import com.observeit.observedapp.correlation.CorrelationContext
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
-import com.observeit.observedapp.correlation.api.MdcCorrelationFilter.Companion.HEADER_CHECKOUT_SCENARIO
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
@@ -22,12 +18,12 @@ class MdcCorrelationFilterTest {
     fun `sets checkout scenario in MDC during execution and cleans up in finally`() {
         // given
         val request = MockHttpServletRequest()
-        request.addHeader(HEADER_CHECKOUT_SCENARIO, "payment-timeout")
+        request.addHeader("X-Checkout-Scenario", "payment-timeout")
         val response = MockHttpServletResponse()
         var observedMdcScenario: String? = null
 
         val filterChain = FilterChain { _, _ ->
-            observedMdcScenario = MDC.get(CHECKOUT_SCENARIO)
+            observedMdcScenario = MDC.get("checkout.scenario")
         }
 
         // when
@@ -37,19 +33,19 @@ class MdcCorrelationFilterTest {
         observedMdcScenario shouldBe "payment-timeout"
 
         // and
-        MDC.get(CHECKOUT_SCENARIO).shouldBeNull()
+        MDC.get("checkout.scenario").shouldBeNull()
     }
 
     @Test
     fun `guarantees MDC cleanup even when exception occurs during chain execution`() {
         // given
         val request = MockHttpServletRequest()
-        request.addHeader(HEADER_CHECKOUT_SCENARIO, "exception-scenario")
+        request.addHeader("X-Checkout-Scenario", "exception-scenario")
         val response = MockHttpServletResponse()
 
         val filterChain = FilterChain { _, _ ->
             CorrelationContext.populateOrderCorrelation("ord-test", "cust-test")
-            throw IllegalStateException("Simulated error")
+            error("Simulated error")
         }
 
         // when
@@ -61,8 +57,8 @@ class MdcCorrelationFilterTest {
         exception.message shouldBe "Simulated error"
 
         // and
-        MDC.get(CHECKOUT_SCENARIO).shouldBeNull()
-        MDC.get(ORDER_ID).shouldBeNull()
-        MDC.get(CUSTOMER_ID).shouldBeNull()
+        MDC.get("checkout.scenario").shouldBeNull()
+        MDC.get("order.id").shouldBeNull()
+        MDC.get("customer.id").shouldBeNull()
     }
 }

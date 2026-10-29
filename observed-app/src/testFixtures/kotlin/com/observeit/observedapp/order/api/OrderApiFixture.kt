@@ -1,6 +1,5 @@
 package com.observeit.observedapp.order.api
 
-import com.observeit.observedapp.correlation.api.MdcCorrelationFilter.Companion.HEADER_CHECKOUT_SCENARIO
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aShipOrderRequest
@@ -18,9 +17,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
     fun createOrderAndExpect201(request: CreateOrderRequest, checkoutScenario: String? = null): CreateOrderResponse =
         createOrder(request, checkoutScenario)
             .expectStatus().isCreated
-            .expectBody(CreateOrderResponse::class.java)
-            .returnResult()
-            .responseBody!!
+            .expectNonNullBody(CreateOrderResponse::class.java)
 
     fun createOrderAndExpect400(request: CreateOrderRequest, checkoutScenario: String? = null): ProblemDetail =
         createOrder(request, checkoutScenario).expectBadRequest()
@@ -28,9 +25,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
     fun getOrderAndExpect200(orderId: String, checkoutScenario: String? = null): OrderResponse =
         getOrder(orderId, checkoutScenario)
             .expectStatus().isOk
-            .expectBody(OrderResponse::class.java)
-            .returnResult()
-            .responseBody!!
+            .expectNonNullBody(OrderResponse::class.java)
 
     fun getOrderAndExpect404(orderId: String, checkoutScenario: String? = null): ProblemDetail =
         getOrder(orderId, checkoutScenario).expectNotFound()
@@ -38,9 +33,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
     fun reserveOrderAndExpect200(orderId: String, checkoutScenario: String? = null): ReserveOrderResponse =
         reserveOrder(orderId, checkoutScenario)
             .expectStatus().isOk
-            .expectBody(ReserveOrderResponse::class.java)
-            .returnResult()
-            .responseBody!!
+            .expectNonNullBody(ReserveOrderResponse::class.java)
 
     fun reserveOrderAndExpect404(orderId: String, checkoutScenario: String? = null): ProblemDetail =
         reserveOrder(orderId, checkoutScenario).expectNotFound()
@@ -57,9 +50,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         checkoutScenario: String? = null,
     ): PayOrderResponse = payOrder(orderId, request, checkoutScenario)
         .expectStatus().isOk
-        .expectBody(PayOrderResponse::class.java)
-        .returnResult()
-        .responseBody!!
+        .expectNonNullBody(PayOrderResponse::class.java)
 
     fun payOrderAndExpect404(
         orderId: String,
@@ -97,9 +88,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         checkoutScenario: String? = null,
     ): ShipOrderResponse = shipOrder(orderId, request, checkoutScenario)
         .expectStatus().isOk
-        .expectBody(ShipOrderResponse::class.java)
-        .returnResult()
-        .responseBody!!
+        .expectNonNullBody(ShipOrderResponse::class.java)
 
     fun shipOrderAndExpect404(
         orderId: String,
@@ -125,9 +114,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         checkoutScenario: String? = null,
     ): CancelOrderResponse = cancelOrder(orderId, request, checkoutScenario)
         .expectStatus().isOk
-        .expectBody(CancelOrderResponse::class.java)
-        .returnResult()
-        .responseBody!!
+        .expectNonNullBody(CancelOrderResponse::class.java)
 
     fun cancelOrderAndExpect404(
         orderId: String,
@@ -194,35 +181,29 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
 
     private fun <S : RequestHeadersSpec<S>> RequestHeadersSpec<S>.withCheckoutScenario(checkoutScenario: String?): S =
         if (checkoutScenario != null) {
-            header(HEADER_CHECKOUT_SCENARIO, checkoutScenario)
+            header("X-Checkout-Scenario", checkoutScenario)
         } else {
             @Suppress("UNCHECKED_CAST")
             this as S
         }
 
-    private fun ResponseSpec.expectNotFound(): ProblemDetail = expectStatus().isNotFound
-        .expectBody(ProblemDetail::class.java)
-        .returnResult()
-        .responseBody!!
+    private fun ResponseSpec.expectNotFound(): ProblemDetail =
+        expectStatus().isNotFound.expectNonNullBody(ProblemDetail::class.java)
 
-    private fun ResponseSpec.expectBadRequest(): ProblemDetail = expectStatus().isBadRequest
-        .expectBody(ProblemDetail::class.java)
-        .returnResult()
-        .responseBody!!
+    private fun ResponseSpec.expectBadRequest(): ProblemDetail =
+        expectStatus().isBadRequest.expectNonNullBody(ProblemDetail::class.java)
 
-    private fun ResponseSpec.expectConflict(): ProblemDetail = expectStatus().isEqualTo(CONFLICT)
-        .expectBody(ProblemDetail::class.java)
-        .returnResult()
-        .responseBody!!
+    private fun ResponseSpec.expectConflict(): ProblemDetail =
+        expectStatus().isEqualTo(CONFLICT).expectNonNullBody(ProblemDetail::class.java)
 
     private fun ResponseSpec.expectUnprocessableEntity(): ProblemDetail =
-        expectStatus().isEqualTo(UNPROCESSABLE_CONTENT)
-            .expectBody(ProblemDetail::class.java)
-            .returnResult()
-            .responseBody!!
+        expectStatus().isEqualTo(UNPROCESSABLE_CONTENT).expectNonNullBody(ProblemDetail::class.java)
 
-    private fun ResponseSpec.expectGatewayTimeout(): ProblemDetail = expectStatus().isEqualTo(GATEWAY_TIMEOUT)
-        .expectBody(ProblemDetail::class.java)
-        .returnResult()
-        .responseBody!!
+    private fun ResponseSpec.expectGatewayTimeout(): ProblemDetail =
+        expectStatus().isEqualTo(GATEWAY_TIMEOUT).expectNonNullBody(ProblemDetail::class.java)
+
+    private fun <T : Any> ResponseSpec.expectNonNullBody(bodyType: Class<T>): T =
+        checkNotNull(expectBody(bodyType).returnResult().responseBody) {
+            "Expected non-null ${bodyType.simpleName} response body"
+        }
 }

@@ -2,9 +2,6 @@ package com.observeit.observedapp.order
 
 import ch.qos.logback.classic.Level.INFO
 import com.observeit.observedapp.IntegrationTest
-import com.observeit.observedapp.correlation.CorrelationContext.CHECKOUT_SCENARIO
-import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
-import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderLineItemRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderResponse
@@ -50,9 +47,9 @@ class CreateOrderIntegrationTest : IntegrationTest() {
                 "order.item_count" to 1L,
             ),
             mdc = mapOf(
-                CHECKOUT_SCENARIO to "happy-path",
-                ORDER_ID to response.orderId,
-                CUSTOMER_ID to "customerId",
+                "checkout.scenario" to "happy-path",
+                "order.id" to response.orderId,
+                "customer.id" to "customerId",
             ),
         )
     }

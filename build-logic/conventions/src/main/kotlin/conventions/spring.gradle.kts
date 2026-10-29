@@ -14,6 +14,7 @@ plugins {
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependency.management)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
     alias(libs.plugins.integration.test)
     `java-test-fixtures`
 }
@@ -35,6 +36,25 @@ tasks.withType<KotlinCompile>().configureEach {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.layout.projectDirectory.file("config/detekt/detekt.yml"))
+}
+
+tasks.named("check") {
+    dependsOn("detektMain", "detektTest", "detektTestFixtures", "detektIntegration")
+}
+
+// Detekt 2.0.0-alpha.6 is compiled against Kotlin 2.4.10 and refuses to run on the project's newer Kotlin version,
+// so its own configurations keep the Kotlin artifacts it was built with. Bump this together with detekt.
+configurations.matching { it.name.startsWith("detekt") }.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlin") {
+            useVersion("2.4.10")
+        }
+    }
 }
 
 // Ktlint 1.5.0 (used by jlleitschuh ktlint-gradle 14.2.0) requires Kotlin compiler 2.1.x embeddable APIs.

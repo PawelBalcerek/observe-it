@@ -11,11 +11,13 @@ Each service module configures three test source sets via `conventions.spring`:
 - **Unit Tests (`src/test/kotlin`)**:
   - Fast, isolated, and decoupled from Spring container startup or network I/O.
   - Verify domain state transitions and invariants, service orchestration and structured log emission, adapter mechanics (such as capacity eviction and concurrency), and filter edge cases.
+  - Verify `@RestControllerAdvice` HTTP status codes, `ProblemDetail` payloads, and error telemetry end-to-end in integration tests rather than unit tests.
 - **Integration Tests (`src/integration/kotlin`)**:
   - Configured via `com.coditory.integration-test` (`./gradlew integrationTest`, wired into `./gradlew check`).
   - Extend the `IntegrationTest` base class (`@SpringBootTest(webEnvironment = RANDOM_PORT)`).
   - Verify the wired HTTP contract (including request validation `ProblemDetail` responses) and emitted telemetry as a **black box** through `*ApiFixture` / `RestTestClient` and `LogCapture`.
   - Interact strictly through the HTTP interface and captured logs—keep each integration test scoped to its feature's endpoints, and test cross-cutting servlet filters once in dedicated filter/health tests rather than re-testing filter cleanup across every endpoint test.
+  - **Ascending HTTP status order**: Within each endpoint integration test class, order test methods by ascending HTTP response status (`2xx` → `4xx` → `5xx`, e.g., `200`/`201` → `400` → `404` → `409` → `422` → `504`).
 
 ## 2. Fakes over Mocks
 
@@ -61,8 +63,9 @@ Keep test methods focused on behavior rather than infrastructure plumbing:
 - **Focused test methods**: Keep each `@Test` focused on a single behavior or scenario outcome so failures point to one cause.
 - **Exhaustive `@ParameterizedTest` with `@FieldSource` for request validation**: Every validation constraint on a request DTO (blank strings, empty collections, non-positive numbers, `@AssertTrue` invariants) must be covered in integration tests using a single `@ParameterizedTest(name = "{0}")` backed by a companion `@FieldSource` list of `Arguments.of(description, invalidRequest, expectedError)`.
 - **Kotest Assertions (`io.kotest:kotest-assertions-core`)**: Use Kotest matchers (`shouldBe`, `shouldNotBeNull`, `shouldNotBeBlank`, `shouldBeInstanceOf`, `shouldContainExactly`, `shouldContainAll`, `shouldThrow`) and `assertSoftly` inside standard JUnit Jupiter test methods, in place of JUnit `Assertions.*`.
-- **Whole-value equality**: Assert a response, entity, or list with one `shouldBe` against an expected fixture (`response shouldBe anOrderResponse(orderId = created.orderId)`, `response shouldBe aCreateOrderResponse(orderId = response.orderId)`), passing any generated field (`id`, `orderId`) into the fixture; reserve `assertSoftly` for checking multiple properties of a value that has no fixture.
-- **Static imports**: Follow `docs/agents/architecture.md` §4 (fixture functions, assertion helpers, and constants such as `INFO` or `ORDER_ID`).
+- **Whole-value equality**: Assert a response, entity, list, or thrown domain exception with one `shouldBe` against an expected instance (`response shouldBe anOrderResponse(orderId = created.orderId)`, `shouldThrow<OutOfStockException> { ... } shouldBe OutOfStockException(...)`), passing any generated field (`id`, `orderId`) into the fixture; reserve `assertSoftly` for checking multiple properties of a value that has no fixture.
+- **Explicit literals over production constants**: In tests and test fixtures (`src/test`, `src/integration`, `src/testFixtures`), write expected HTTP header names, path variable names, MDC keys, and domain values as explicit literals (`"X-Checkout-Scenario"`, `"order.id"`, `"customer.id"`) rather than importing constants from production code, so tests lock down the external contract and detect accidental constant renames.
+- **Static imports**: Follow `docs/agents/architecture.md` §4 (fixture functions, assertion helpers, and enum/framework constants such as `INFO` or `CREATED`).
 - **Awaitility Kotlin (`org.awaitility:awaitility-kotlin`)**: When verifying asynchronous or concurrent background work, use Awaitility (`await atMost ... untilAsserted { ... }`) instead of `Thread.sleep`.
 
 ```kotlin
@@ -82,7 +85,7 @@ fun `creates resource and emits structured log`() {
         level = INFO,
         message = "Resource created",
         keyValues = mapOf("resource.name" to "name"),
-        mdc = mapOf(RESOURCE_ID to response.id),
+        mdc = mapOf("resource.id" to response.id),
     )
 }
 ```

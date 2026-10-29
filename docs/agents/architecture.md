@@ -23,20 +23,23 @@ Dependencies point strictly inward toward `domain` (`api` → `domain` ← `infr
    - **Boundary validation (`@Valid`)**: Validate all request inputs at the `api` boundary using Jakarta Bean Validation annotations (`@field:NotBlank`, `@field:NotEmpty`, `@field:Positive`, `@field:Valid`) and `@AssertTrue` methods on request DTOs for cross-field or format rules (e.g., single currency across items, valid ISO-4217 currency code) so `domain` receives already-valid data.
    - **DTO ↔ Domain mapping**: Keep mapping inside `api` via `RequestDto.toDomain*()` conversion methods and `ResponseDto.from(domain)` factory methods so `domain` never imports `api` DTOs.
    - **DTO naming**: The canonical full representation of an entity is `<Entity>Response` (`OrderResponse`, returned by lookups). Action-specific payloads carry the action as a prefix: `<Action><Entity>Request` / `<Action><Entity>Response` (`CreateOrderRequest`, `CreateOrderResponse`). Nested DTOs follow their parent's prefix (`CreateOrderLineItemRequest`, `OrderLineItemResponse`).
-   - **Global `ProblemDetail` error handling (`api/GlobalControllerAdvice`)**: Centralize `@RestControllerAdvice` in the shared root `api` package returning RFC 7807 `ProblemDetail` responses (attaching validation messages under an `errors` property on `400 Bad Request`). Keep advice handlers limited to exceptions that can actually be thrown, and statically import `HttpStatus` constants (`BAD_REQUEST`).
-     - **Handle shared base exceptions**: Handlers catch base exception types from the root `domain` package (`NotFoundException`); each feature exception extends the matching base (`OrderNotFoundException : NotFoundException`), so `domain` stays decoupled from `api` and new features reuse existing handlers.
-     - **One path per concern**: Every client-error (4xx) handler logs at `WARN` through one private helper (`logClientWarning(message)`), and every handler builds its response through one private factory (`problemDetail(status, detail)`).
+   - **Global & feature `ProblemDetail` error handling (`api/GlobalControllerAdvice` & `<feature>/api/<Feature>ControllerAdvice`)**: Return RFC 7807 `ProblemDetail` responses (attaching validation messages under an `errors` property on `400 Bad Request`). Keep advice handlers limited to exceptions that can actually be thrown, and statically import `HttpStatus` constants (`BAD_REQUEST`).
+     - **Handle shared base exceptions in `GlobalControllerAdvice`**: Handlers catch base exception types from the root `domain` package (`NotFoundException`, `ConflictException`, `UnprocessableEntityException`, `GatewayTimeoutException`); each feature exception extends the matching base (`OrderNotFoundException : NotFoundException`), so `domain` stays decoupled from `api` and new features reuse existing handlers.
+     - **One path per concern**: Every client-error (4xx) handler logs at `WARN` through one private helper (`logClientWarning(message)`), every server-error (5xx) handler logs at `ERROR` with its cause through one private helper (`logServerError(message, exception)`), and every handler builds its response through one private factory (`problemDetail(status, detail)`).
+     - **Feature-specific structured error logging (`<Feature>ControllerAdvice`)**: When a domain failure requires structured key-value telemetry (`error.type`, `inventory.*`, `payment.*`), handle the exception in `<feature>/api/<Feature>ControllerAdvice` (`@Order(HIGHEST_PRECEDENCE)`) to emit the structured `WARN` / `ERROR` log and return the `ProblemDetail`, so `domain` services never log and throw.
 
 2. **`<feature>/domain` (Domain Model & Use-Case Orchestration)**:
-   - **Entities & Value Objects**: Pure Kotlin types that own state transitions, business invariants, and domain calculations. Use rich standard value types—`BigDecimal` for monetary amounts and `java.util.Currency` for ISO-4217 currencies—converting to primitives (`Double`, `String`) only at serialization or telemetry boundaries. Keep entities free of framework and logging imports.
+   - **Entities & Value Objects**: Pure Kotlin types that own state transitions, business invariants, and domain calculations. Transition methods (`reserve()`, `pay()`, `ship()`, `cancel()`) self-enforce their state-machine invariants and throw the corresponding domain exception (`InvalidOrderStateTransitionException`) directly, keeping `@Service` orchestrators free of duplicate precondition checks. Use rich standard value types—`BigDecimal` for monetary amounts and `java.util.Currency` for ISO-4217 currencies—converting to primitives (`Double`, `String`) only at serialization or telemetry boundaries. Keep entities free of framework and logging imports.
+   - **Domain Exceptions**: Declare feature domain exceptions as `data class`es carrying their structured domain attributes (`sku`, `paymentMethod`, `latencyMs`, `attemptedAction`) and extending the matching shared root `domain` base exception. Value equality on domain attributes lets unit tests assert thrown exceptions directly with `shouldThrow<T> { ... } shouldBe ExpectedException(...)`.
    - **Ports**: Pure Kotlin interfaces (e.g., repositories, gateways) defining what the domain requires from driven adapters.
-   - **Application Services (`@Service`)**: Coordinate use cases by loading/persisting domain models through ports, updating diagnostic context (`MDC`), and emitting structured logs (`LoggingEventBuilder.addKeyValue`).
+   - **Application Services (`@Service`)**: Coordinate use cases by loading/persisting domain models through ports, updating diagnostic context (`MDC`), and emitting structured logs (`LoggingEventBuilder.addKeyValue`) on outcome paths. On failure paths, throw the domain exception without logging; controller advice owns failure logging.
    - Keep `domain` free of transport and web imports (`jakarta.servlet.*`, `org.springframework.web.*`, `jakarta.validation.*`).
    - **Shared root `domain`**: Place types reused across multiple features (exception base classes such as `NotFoundException`) in the root `domain` package.
 
 3. **`<feature>/infrastructure` (Driven Adapters)**:
-   - Contains concrete implementations of `domain` ports (`@Repository` stores, HTTP client adapters, background workers).
+   - Contains concrete implementations of `domain` ports (`@Repository` stores, HTTP client adapters, simulated gateways, background workers).
    - Encapsulates storage data structures, framework configuration properties (`@Value`, `@ConfigurationProperties`), and external I/O behind the `domain` port interface.
+   - **Non-blocking delays & monotonic elapsed time**: Schedule artificial or simulated delays with `CompletableFuture.delayedExecutor(delayMs, MILLISECONDS)` and measure elapsed duration with `kotlin.time.measureTime` (`TimeSource.Monotonic`), never `Thread.sleep` or wall-clock `System.currentTimeMillis()` (enforced by Detekt `ForbiddenMethodCall`).
 
 ## 2. Cross-Cutting Concerns
 
@@ -56,7 +59,7 @@ Prefer lock-free `java.util.concurrent` primitives over `synchronized` blocks an
 
 Statically import members whose bare name still reads unambiguously at the call site, in production and test code alike:
 
-- Enum constants and constant fields: `CREATED`, `NOT_FOUND`, `APPLICATION_JSON`, `HIGHEST_PRECEDENCE`, `SECONDS`, `INFO`, `ORDER_ID`.
+- Enum constants and standard library/framework constant fields: `CREATED`, `NOT_FOUND`, `APPLICATION_JSON`, `HIGHEST_PRECEDENCE`, `SECONDS`, `INFO`.
 - Fixture, assertion, and matcher functions: `aCreateOrderRequest()`, `shouldBeNotFoundError(...)`, `shouldBe`.
 
 Keep the qualifier where it carries meaning the bare name loses:
@@ -64,3 +67,8 @@ Keep the qualifier where it carries meaning the bare name loses:
 - Generic factory or constant names: `Currency.getInstance(...)`, `UUID.randomUUID()`, `BigDecimal.ZERO`, `Arguments.of(...)`, `LoggerFactory.getLogger(...)`.
 - Functions on a Kotlin `object` acting as a namespace: `CorrelationContext.populateOrderCorrelation(...)`, `MDC.get(...)`.
 - Names that would collide with another import or member in the same file.
+
+## 5. Kotlin Idioms & Visibility
+
+- **Exhaustive `when` expressions**: Branch on enums and sealed types with an exhaustive `when` listing every entry explicitly and without an `else` branch (enforced by Detekt `ElseCaseInsteadOfExhaustiveWhen`).
+- **`private companion object` by default**: Mark every `companion object` holding class-internal constants `private companion object`. Widen a companion object only when it exposes factory methods (`ResponseDto.from(domain)`) or JUnit `@FieldSource` providers.

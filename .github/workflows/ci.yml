@@ -41,9 +41,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
+          cache-disabled: ${{ inputs.build-cache == 'disabled' }}
           cache-read-only: false
 
-      - name: Run Ktlint check and tests
+      - name: Run Ktlint, Detekt, and tests
         run: ./gradlew check ${{ inputs.build-cache == 'disabled' && '--no-build-cache' || '' }}
 
       - name: Publish Test Report

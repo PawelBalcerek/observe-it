@@ -15,7 +15,7 @@ private const val VALIDATION_ERROR_DETAIL = "Request validation failed"
 
 @Suppress("UNCHECKED_CAST")
 private val ProblemDetail.errors: List<String>
-    get() = (properties?.get(ERRORS_KEY) as? List<String>) ?: emptyList()
+    get() = (properties?.get(ERRORS_KEY) as? List<String>).orEmpty()
 
 fun ProblemDetail.shouldBeValidationError(vararg expectedErrors: String) {
     assertSoftly(this) {
