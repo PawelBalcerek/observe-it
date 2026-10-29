@@ -4,7 +4,10 @@ import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import org.springframework.http.HttpStatus.BAD_REQUEST
+import org.springframework.http.HttpStatus.CONFLICT
+import org.springframework.http.HttpStatus.GATEWAY_TIMEOUT
 import org.springframework.http.HttpStatus.NOT_FOUND
+import org.springframework.http.HttpStatus.UNPROCESSABLE_CONTENT
 import org.springframework.http.ProblemDetail
 
 private const val ERRORS_KEY = "errors"
@@ -29,6 +32,36 @@ fun ProblemDetail.shouldBeNotFoundError(expectedDetail: String? = null) {
     assertSoftly(this) {
         status shouldBe NOT_FOUND.value()
         title shouldBe NOT_FOUND.reasonPhrase
+        if (expectedDetail != null) {
+            detail shouldBe expectedDetail
+        }
+    }
+}
+
+fun ProblemDetail.shouldBeConflictError(expectedDetail: String? = null) {
+    assertSoftly(this) {
+        status shouldBe CONFLICT.value()
+        title shouldBe CONFLICT.reasonPhrase
+        if (expectedDetail != null) {
+            detail shouldBe expectedDetail
+        }
+    }
+}
+
+fun ProblemDetail.shouldBeUnprocessableEntityError(expectedDetail: String? = null) {
+    assertSoftly(this) {
+        status shouldBe UNPROCESSABLE_CONTENT.value()
+        title shouldBe UNPROCESSABLE_CONTENT.reasonPhrase
+        if (expectedDetail != null) {
+            detail shouldBe expectedDetail
+        }
+    }
+}
+
+fun ProblemDetail.shouldBeGatewayTimeoutError(expectedDetail: String? = null) {
+    assertSoftly(this) {
+        status shouldBe GATEWAY_TIMEOUT.value()
+        title shouldBe GATEWAY_TIMEOUT.reasonPhrase
         if (expectedDetail != null) {
             detail shouldBe expectedDetail
         }

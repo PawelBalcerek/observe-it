@@ -1,8 +1,12 @@
 package com.observeit.observedapp.order.api
 
 import com.observeit.observedapp.correlation.api.MdcCorrelationFilter.Companion.HEADER_CHECKOUT_SCENARIO
+import com.observeit.observedapp.order.OrderFixtures.aCancelOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aShipOrderRequest
+import org.springframework.http.HttpStatus.CONFLICT
+import org.springframework.http.HttpStatus.GATEWAY_TIMEOUT
+import org.springframework.http.HttpStatus.UNPROCESSABLE_CONTENT
 import org.springframework.http.MediaType.APPLICATION_JSON
 import org.springframework.http.ProblemDetail
 import org.springframework.test.web.servlet.client.RestTestClient
@@ -19,11 +23,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
             .responseBody!!
 
     fun createOrderAndExpect400(request: CreateOrderRequest, checkoutScenario: String? = null): ProblemDetail =
-        createOrder(request, checkoutScenario)
-            .expectStatus().isBadRequest
-            .expectBody(ProblemDetail::class.java)
-            .returnResult()
-            .responseBody!!
+        createOrder(request, checkoutScenario).expectBadRequest()
 
     fun getOrderAndExpect200(orderId: String, checkoutScenario: String? = null): OrderResponse =
         getOrder(orderId, checkoutScenario)
@@ -45,6 +45,12 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
     fun reserveOrderAndExpect404(orderId: String, checkoutScenario: String? = null): ProblemDetail =
         reserveOrder(orderId, checkoutScenario).expectNotFound()
 
+    fun reserveOrderAndExpect409(orderId: String, checkoutScenario: String? = null): ProblemDetail =
+        reserveOrder(orderId, checkoutScenario).expectConflict()
+
+    fun reserveOrderAndExpect422(orderId: String, checkoutScenario: String? = null): ProblemDetail =
+        reserveOrder(orderId, checkoutScenario).expectUnprocessableEntity()
+
     fun payOrderAndExpect200(
         orderId: String,
         request: PayOrderRequest = aPayOrderRequest(),
@@ -61,15 +67,29 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         checkoutScenario: String? = null,
     ): ProblemDetail = payOrder(orderId, request, checkoutScenario).expectNotFound()
 
+    fun payOrderAndExpect409(
+        orderId: String,
+        request: PayOrderRequest = aPayOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = payOrder(orderId, request, checkoutScenario).expectConflict()
+
+    fun payOrderAndExpect422(
+        orderId: String,
+        request: PayOrderRequest = aPayOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = payOrder(orderId, request, checkoutScenario).expectUnprocessableEntity()
+
+    fun payOrderAndExpect504(
+        orderId: String,
+        request: PayOrderRequest = aPayOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = payOrder(orderId, request, checkoutScenario).expectGatewayTimeout()
+
     fun payOrderAndExpect400(
         orderId: String,
         request: PayOrderRequest,
         checkoutScenario: String? = null,
-    ): ProblemDetail = payOrder(orderId, request, checkoutScenario)
-        .expectStatus().isBadRequest
-        .expectBody(ProblemDetail::class.java)
-        .returnResult()
-        .responseBody!!
+    ): ProblemDetail = payOrder(orderId, request, checkoutScenario).expectBadRequest()
 
     fun shipOrderAndExpect200(
         orderId: String,
@@ -87,15 +107,45 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         checkoutScenario: String? = null,
     ): ProblemDetail = shipOrder(orderId, request, checkoutScenario).expectNotFound()
 
+    fun shipOrderAndExpect409(
+        orderId: String,
+        request: ShipOrderRequest = aShipOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = shipOrder(orderId, request, checkoutScenario).expectConflict()
+
     fun shipOrderAndExpect400(
         orderId: String,
         request: ShipOrderRequest,
         checkoutScenario: String? = null,
-    ): ProblemDetail = shipOrder(orderId, request, checkoutScenario)
-        .expectStatus().isBadRequest
-        .expectBody(ProblemDetail::class.java)
+    ): ProblemDetail = shipOrder(orderId, request, checkoutScenario).expectBadRequest()
+
+    fun cancelOrderAndExpect200(
+        orderId: String,
+        request: CancelOrderRequest = aCancelOrderRequest(),
+        checkoutScenario: String? = null,
+    ): CancelOrderResponse = cancelOrder(orderId, request, checkoutScenario)
+        .expectStatus().isOk
+        .expectBody(CancelOrderResponse::class.java)
         .returnResult()
         .responseBody!!
+
+    fun cancelOrderAndExpect404(
+        orderId: String,
+        request: CancelOrderRequest = aCancelOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = cancelOrder(orderId, request, checkoutScenario).expectNotFound()
+
+    fun cancelOrderAndExpect400(
+        orderId: String,
+        request: CancelOrderRequest,
+        checkoutScenario: String? = null,
+    ): ProblemDetail = cancelOrder(orderId, request, checkoutScenario).expectBadRequest()
+
+    fun cancelOrderAndExpect409(
+        orderId: String,
+        request: CancelOrderRequest = aCancelOrderRequest(),
+        checkoutScenario: String? = null,
+    ): ProblemDetail = cancelOrder(orderId, request, checkoutScenario).expectConflict()
 
     private fun createOrder(request: CreateOrderRequest, checkoutScenario: String? = null): ResponseSpec =
         restTestClient.post()
@@ -131,6 +181,17 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
             .withCheckoutScenario(checkoutScenario)
             .exchange()
 
+    private fun cancelOrder(
+        orderId: String,
+        request: CancelOrderRequest,
+        checkoutScenario: String? = null,
+    ): ResponseSpec = restTestClient.post()
+        .uri("/api/orders/{orderId}/cancel", orderId)
+        .contentType(APPLICATION_JSON)
+        .body(request)
+        .withCheckoutScenario(checkoutScenario)
+        .exchange()
+
     private fun <S : RequestHeadersSpec<S>> RequestHeadersSpec<S>.withCheckoutScenario(checkoutScenario: String?): S =
         if (checkoutScenario != null) {
             header(HEADER_CHECKOUT_SCENARIO, checkoutScenario)
@@ -140,6 +201,27 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         }
 
     private fun ResponseSpec.expectNotFound(): ProblemDetail = expectStatus().isNotFound
+        .expectBody(ProblemDetail::class.java)
+        .returnResult()
+        .responseBody!!
+
+    private fun ResponseSpec.expectBadRequest(): ProblemDetail = expectStatus().isBadRequest
+        .expectBody(ProblemDetail::class.java)
+        .returnResult()
+        .responseBody!!
+
+    private fun ResponseSpec.expectConflict(): ProblemDetail = expectStatus().isEqualTo(CONFLICT)
+        .expectBody(ProblemDetail::class.java)
+        .returnResult()
+        .responseBody!!
+
+    private fun ResponseSpec.expectUnprocessableEntity(): ProblemDetail =
+        expectStatus().isEqualTo(UNPROCESSABLE_CONTENT)
+            .expectBody(ProblemDetail::class.java)
+            .returnResult()
+            .responseBody!!
+
+    private fun ResponseSpec.expectGatewayTimeout(): ProblemDetail = expectStatus().isEqualTo(GATEWAY_TIMEOUT)
         .expectBody(ProblemDetail::class.java)
         .returnResult()
         .responseBody!!

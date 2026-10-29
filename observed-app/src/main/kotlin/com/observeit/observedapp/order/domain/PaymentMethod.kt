@@ -2,4 +2,6 @@ package com.observeit.observedapp.order.domain
 
 enum class PaymentMethod {
     CREDIT_CARD,
+    DECLINED_CARD,
+    TIMEOUT_GATEWAY,
 }

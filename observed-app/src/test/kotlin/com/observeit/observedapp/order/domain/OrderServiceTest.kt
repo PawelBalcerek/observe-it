@@ -2,18 +2,26 @@ package com.observeit.observedapp.order.domain
 
 import ch.qos.logback.classic.Level.DEBUG
 import ch.qos.logback.classic.Level.INFO
+import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.correlation.CorrelationContext.CUSTOMER_ID
 import com.observeit.observedapp.correlation.CorrelationContext.ORDER_ID
+import com.observeit.observedapp.order.FakePaymentGateway
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
+import com.observeit.observedapp.order.domain.OrderState.CANCELLED
+import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderState.FAILED
 import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import com.observeit.observedapp.order.domain.OrderState.SHIPPED
 import com.observeit.observedapp.order.domain.PaymentMethod.CREDIT_CARD
+import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
+import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
 import com.observeit.observedapp.order.domain.ShippingMethod.STANDARD
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.test.LogCapture
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -26,7 +34,8 @@ class OrderServiceTest {
     val logCapture = LogCapture(level = DEBUG)
 
     private val repository = InMemoryOrderRepository()
-    private val service = OrderService(repository)
+    private val paymentGateway = FakePaymentGateway()
+    private val service = OrderService(repository, paymentGateway)
 
     @Test
     fun `creates order, populates correlation, stores in repository, and emits structured log`() {
@@ -63,7 +72,7 @@ class OrderServiceTest {
     }
 
     @Test
-    fun `gets order by id, populates customer correlation, and emits structured log`() {
+    fun `gets order, populates correlation, and emits structured log`() {
         // given
         val existingOrder = repository.save(anOrder())
 
@@ -91,7 +100,7 @@ class OrderServiceTest {
     }
 
     @Test
-    fun `throws OrderNotFoundException when order does not exist`() {
+    fun `throws OrderNotFoundException when getting order that does not exist`() {
         // when
         val exception = shouldThrow<OrderNotFoundException> {
             service.getOrder("non-existent-id")
@@ -103,19 +112,15 @@ class OrderServiceTest {
     }
 
     @Test
-    fun `reserves order, transitions state to RESERVED, updates repository, and emits structured inventory logs`() {
+    fun `reserves order, transitions state from CREATED to RESERVED, updates repository, and emits structured log`() {
         // given
-        val items = listOf(
-            anOrderLineItem(sku = "SKU-1", quantity = 2),
-            anOrderLineItem(sku = "SKU-2", quantity = 3),
-        )
-        val existingOrder = repository.save(anOrder(items = items))
+        val existingOrder = repository.save(anOrder(state = CREATED))
 
         // when
         val reserved = service.reserveOrder(existingOrder.id)
 
         // then
-        reserved shouldBe anOrder(id = existingOrder.id, items = items, state = RESERVED)
+        reserved shouldBe anOrder(id = existingOrder.id, state = RESERVED)
 
         // and
         repository.findById(existingOrder.id) shouldBe reserved
@@ -123,10 +128,10 @@ class OrderServiceTest {
         // and
         logCapture.assertLogged(
             level = DEBUG,
-            message = "Inventory reserved for SKU-1 (2/100)",
+            message = "Inventory reserved for sku (1/100)",
             keyValues = mapOf(
-                "inventory.sku" to "SKU-1",
-                "inventory.requested_quantity" to 2L,
+                "inventory.sku" to "sku",
+                "inventory.requested_quantity" to 1L,
                 "inventory.available_quantity" to 100L,
             ),
             mdc = mapOf(
@@ -134,19 +139,8 @@ class OrderServiceTest {
                 CUSTOMER_ID to existingOrder.customerId,
             ),
         )
-        logCapture.assertLogged(
-            level = DEBUG,
-            message = "Inventory reserved for SKU-2 (3/100)",
-            keyValues = mapOf(
-                "inventory.sku" to "SKU-2",
-                "inventory.requested_quantity" to 3L,
-                "inventory.available_quantity" to 100L,
-            ),
-            mdc = mapOf(
-                ORDER_ID to existingOrder.id,
-                CUSTOMER_ID to existingOrder.customerId,
-            ),
-        )
+
+        // and
         logCapture.assertLogged(
             level = INFO,
             message = "Order reserved",
@@ -162,6 +156,57 @@ class OrderServiceTest {
     }
 
     @Test
+    fun `reserves order with low stock item, emits warning log without throwable, and transitions to RESERVED`() {
+        // given
+        val items = listOf(anOrderLineItem(sku = "SKU-LOW-STOCK"))
+        val existingOrder = repository.save(anOrder(items = items))
+
+        // when
+        val reserved = service.reserveOrder(existingOrder.id)
+
+        // then
+        reserved shouldBe anOrder(id = existingOrder.id, items = items, state = RESERVED)
+
+        // and
+        val logEvent = logCapture.assertLogged(
+            level = WARN,
+            message = "Low stock for SKU-LOW-STOCK (1/2)",
+            keyValues = mapOf(
+                "inventory.sku" to "SKU-LOW-STOCK",
+                "inventory.requested_quantity" to 1L,
+                "inventory.available_quantity" to 2L,
+            ),
+            mdc = mapOf(
+                ORDER_ID to existingOrder.id,
+                CUSTOMER_ID to existingOrder.customerId,
+            ),
+        )
+        logEvent.throwableProxy shouldBe null
+    }
+
+    @Test
+    fun `reserves order with out-of-stock item and transitions order to FAILED`() {
+        // given
+        val items = listOf(anOrderLineItem(sku = "SKU-OUT-OF-STOCK"))
+        val existingOrder = repository.save(anOrder(items = items))
+
+        // when
+        val exception = shouldThrow<OutOfStockException> {
+            service.reserveOrder(existingOrder.id)
+        }
+
+        // then
+        exception shouldBe OutOfStockException(
+            sku = "SKU-OUT-OF-STOCK",
+            requestedQuantity = 1L,
+            availableQuantity = 0L,
+        )
+
+        // and
+        repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, items = items, state = FAILED)
+    }
+
+    @Test
     fun `throws OrderNotFoundException when reserving order that does not exist`() {
         // when
         val exception = shouldThrow<OrderNotFoundException> {
@@ -169,8 +214,7 @@ class OrderServiceTest {
         }
 
         // then
-        exception.orderId shouldBe "non-existent-id"
-        exception.message shouldBe "Order not found: non-existent-id"
+        exception shouldBe OrderNotFoundException("non-existent-id")
     }
 
     @Test
@@ -205,6 +249,43 @@ class OrderServiceTest {
     }
 
     @Test
+    fun `pays order with declined card and transitions order to FAILED`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = RESERVED))
+
+        // when
+        val exception = shouldThrow<PaymentDeclinedException> {
+            service.payOrder(existingOrder.id, paymentMethod = DECLINED_CARD)
+        }
+
+        // then
+        exception shouldBe PaymentDeclinedException(paymentMethod = DECLINED_CARD, latencyMs = 50L)
+
+        // and
+        repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, state = FAILED)
+    }
+
+    @Test
+    fun `pays order with timeout gateway and transitions order to FAILED`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = RESERVED))
+
+        // when
+        val exception = shouldThrow<PaymentGatewayTimeoutException> {
+            service.payOrder(existingOrder.id, paymentMethod = TIMEOUT_GATEWAY)
+        }
+
+        // then
+        exception shouldBe PaymentGatewayTimeoutException(paymentMethod = TIMEOUT_GATEWAY, latencyMs = 1500L)
+
+        // and
+        exception.cause.shouldNotBeNull()
+
+        // and
+        repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, state = FAILED)
+    }
+
+    @Test
     fun `throws OrderNotFoundException when paying order that does not exist`() {
         // when
         val exception = shouldThrow<OrderNotFoundException> {
@@ -212,8 +293,7 @@ class OrderServiceTest {
         }
 
         // then
-        exception.orderId shouldBe "non-existent-id"
-        exception.message shouldBe "Order not found: non-existent-id"
+        exception shouldBe OrderNotFoundException("non-existent-id")
     }
 
     @Test
@@ -247,6 +327,161 @@ class OrderServiceTest {
     }
 
     @Test
+    fun `cancels order in CREATED state, transitions to CANCELLED, updates repository, and emits cancellation log`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = CREATED))
+
+        // when
+        val cancelled = service.cancelOrder(existingOrder.id, reason = "buyer changed mind")
+
+        // then
+        cancelled shouldBe anOrder(id = existingOrder.id, state = CANCELLED)
+
+        // and
+        repository.findById(existingOrder.id) shouldBe cancelled
+
+        // and
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order cancelled",
+            keyValues = mapOf(
+                "order.state" to "CANCELLED",
+                "order.previous_state" to "CREATED",
+                "cancellation.reason" to "buyer changed mind",
+            ),
+            mdc = mapOf(
+                ORDER_ID to existingOrder.id,
+                CUSTOMER_ID to existingOrder.customerId,
+            ),
+        )
+    }
+
+    @Test
+    fun `cancels order in RESERVED state, transitions to CANCELLED, updates repository, and emits cancellation log`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = RESERVED))
+
+        // when
+        val cancelled = service.cancelOrder(existingOrder.id, reason = "item no longer needed")
+
+        // then
+        cancelled shouldBe anOrder(id = existingOrder.id, state = CANCELLED)
+
+        // and
+        repository.findById(existingOrder.id) shouldBe cancelled
+
+        // and
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order cancelled",
+            keyValues = mapOf(
+                "order.state" to "CANCELLED",
+                "order.previous_state" to "RESERVED",
+                "cancellation.reason" to "item no longer needed",
+            ),
+            mdc = mapOf(
+                ORDER_ID to existingOrder.id,
+                CUSTOMER_ID to existingOrder.customerId,
+            ),
+        )
+    }
+
+    @Test
+    fun `throws OrderNotFoundException when cancelling order that does not exist`() {
+        // when
+        val exception = shouldThrow<OrderNotFoundException> {
+            service.cancelOrder("non-existent-id", reason = "buyer request")
+        }
+
+        // then
+        exception shouldBe OrderNotFoundException("non-existent-id")
+    }
+
+    @Test
+    fun `throws InvalidOrderStateTransitionException when reserving order in incompatible state`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = CANCELLED))
+
+        // when
+        val exception = shouldThrow<InvalidOrderStateTransitionException> {
+            service.reserveOrder(existingOrder.id)
+        }
+
+        // then
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = existingOrder.id,
+            state = CANCELLED,
+            attemptedAction = "reserve",
+        )
+
+        // and
+        repository.findById(existingOrder.id)?.state shouldBe CANCELLED
+    }
+
+    @Test
+    fun `throws InvalidOrderStateTransitionException when paying order in incompatible state`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = CANCELLED))
+
+        // when
+        val exception = shouldThrow<InvalidOrderStateTransitionException> {
+            service.payOrder(existingOrder.id, paymentMethod = CREDIT_CARD)
+        }
+
+        // then
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = existingOrder.id,
+            state = CANCELLED,
+            attemptedAction = "pay",
+        )
+
+        // and
+        repository.findById(existingOrder.id)?.state shouldBe CANCELLED
+    }
+
+    @Test
+    fun `throws InvalidOrderStateTransitionException when shipping order in incompatible state`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = CANCELLED))
+
+        // when
+        val exception = shouldThrow<InvalidOrderStateTransitionException> {
+            service.shipOrder(existingOrder.id, shippingMethod = STANDARD)
+        }
+
+        // then
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = existingOrder.id,
+            state = CANCELLED,
+            attemptedAction = "ship",
+        )
+
+        // and
+        repository.findById(existingOrder.id)?.state shouldBe CANCELLED
+    }
+
+    @Test
+    fun `throws InvalidOrderStateTransitionException when cancelling order in incompatible state`() {
+        // given
+        val existingOrder = repository.save(anOrder(state = SHIPPED))
+
+        // when
+        val exception = shouldThrow<InvalidOrderStateTransitionException> {
+            service.cancelOrder(existingOrder.id, reason = "too late")
+        }
+
+        // then
+        exception shouldBe InvalidOrderStateTransitionException(
+            orderId = existingOrder.id,
+            state = SHIPPED,
+            attemptedAction = "cancel",
+        )
+
+        // and
+        repository.findById(existingOrder.id)?.state shouldBe SHIPPED
+    }
+
+    @Test
     fun `throws OrderNotFoundException when shipping order that does not exist`() {
         // when
         val exception = shouldThrow<OrderNotFoundException> {
@@ -254,7 +489,6 @@ class OrderServiceTest {
         }
 
         // then
-        exception.orderId shouldBe "non-existent-id"
-        exception.message shouldBe "Order not found: non-existent-id"
+        exception shouldBe OrderNotFoundException("non-existent-id")
     }
 }

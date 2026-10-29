@@ -48,4 +48,13 @@ class OrderController(private val orderService: OrderService) {
         val order = orderService.shipOrder(orderId, request.toDomain())
         return ShipOrderResponse.from(order)
     }
+
+    @PostMapping("/{orderId}/cancel")
+    fun cancelOrder(
+        @PathVariable orderId: String,
+        @RequestBody @Valid request: CancelOrderRequest,
+    ): CancelOrderResponse {
+        val order = orderService.cancelOrder(orderId, request.toDomain())
+        return CancelOrderResponse.from(order)
+    }
 }
