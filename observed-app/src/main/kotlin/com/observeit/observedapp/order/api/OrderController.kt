@@ -39,7 +39,13 @@ class OrderController(private val orderService: OrderService) {
 
     @PostMapping("/{orderId}/pay")
     fun payOrder(@PathVariable orderId: String, @RequestBody @Valid request: PayOrderRequest): PayOrderResponse {
-        val order = orderService.payOrder(orderId, request.paymentMethod)
+        val order = orderService.payOrder(orderId, request.toDomain())
         return PayOrderResponse.from(order)
+    }
+
+    @PostMapping("/{orderId}/ship")
+    fun shipOrder(@PathVariable orderId: String, @RequestBody @Valid request: ShipOrderRequest): ShipOrderResponse {
+        val order = orderService.shipOrder(orderId, request.toDomain())
+        return ShipOrderResponse.from(order)
     }
 }

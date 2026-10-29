@@ -1,8 +1,11 @@
 package com.observeit.observedapp.order.api
 
-import jakarta.validation.constraints.NotBlank
+import com.observeit.observedapp.order.domain.PaymentMethod
+import jakarta.validation.constraints.NotNull
 
 data class PayOrderRequest(
-    @field:NotBlank(message = "paymentMethod must not be blank")
-    val paymentMethod: String,
-)
+    @field:NotNull(message = "paymentMethod must not be null")
+    val paymentMethod: PaymentMethod?,
+) {
+    fun toDomain(): PaymentMethod = checkNotNull(paymentMethod)
+}

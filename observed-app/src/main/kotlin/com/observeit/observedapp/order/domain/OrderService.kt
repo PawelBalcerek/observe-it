@@ -67,7 +67,7 @@ class OrderService(private val orderRepository: OrderRepository) {
         return reserved
     }
 
-    fun payOrder(orderId: String, paymentMethod: String): Order {
+    fun payOrder(orderId: String, paymentMethod: PaymentMethod): Order {
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
         val paid = orderRepository.save(order.pay())
@@ -75,11 +75,25 @@ class OrderService(private val orderRepository: OrderRepository) {
         logger.atInfo()
             .addKeyValue("order.state", paid.state.name)
             .addKeyValue("order.previous_state", previousState.name)
-            .addKeyValue("payment.method", paymentMethod)
+            .addKeyValue("payment.method", paymentMethod.name)
             .addKeyValue("payment.latency_ms", STANDARD_PAYMENT_LATENCY_MS)
             .log("Order paid")
 
         return paid
+    }
+
+    fun shipOrder(orderId: String, shippingMethod: ShippingMethod): Order {
+        val order = loadOrderWithCorrelation(orderId)
+        val previousState = order.state
+        val shipped = orderRepository.save(order.ship())
+
+        logger.atInfo()
+            .addKeyValue("order.state", shipped.state.name)
+            .addKeyValue("order.previous_state", previousState.name)
+            .addKeyValue("shipping.method", shippingMethod.name)
+            .log("Order shipped")
+
+        return shipped
     }
 
     private fun loadOrderWithCorrelation(orderId: String): Order {

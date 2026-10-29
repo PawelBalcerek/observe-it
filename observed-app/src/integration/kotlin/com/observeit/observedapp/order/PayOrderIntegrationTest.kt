@@ -11,7 +11,6 @@ import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.PayOrderRequest
-import com.observeit.observedapp.order.domain.OrderState.PAID
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeNotFoundError
 import com.observeit.observedapp.test.shouldBeValidationError
@@ -39,12 +38,11 @@ class PayOrderIntegrationTest : IntegrationTest() {
         // when
         val response = orderApi.payOrderAndExpect200(
             orderId = created.orderId,
-            request = aPayOrderRequest(paymentMethod = "CREDIT_CARD"),
             checkoutScenario = "happy-path",
         )
 
         // then
-        response shouldBe aPayOrderResponse(orderId = created.orderId, state = PAID)
+        response shouldBe aPayOrderResponse(orderId = created.orderId)
 
         // and
         logCapture.assertLogged(
@@ -101,9 +99,9 @@ class PayOrderIntegrationTest : IntegrationTest() {
         @JvmStatic
         val invalidPayRequests = listOf(
             Arguments.of(
-                "paymentMethod is blank",
-                aPayOrderRequest(paymentMethod = ""),
-                "paymentMethod must not be blank",
+                "paymentMethod is null",
+                aPayOrderRequest(paymentMethod = null),
+                "paymentMethod must not be null",
             ),
         )
     }
