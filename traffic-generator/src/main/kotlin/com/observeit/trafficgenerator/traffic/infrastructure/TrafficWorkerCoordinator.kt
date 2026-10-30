@@ -2,6 +2,7 @@ package com.observeit.trafficgenerator.traffic.infrastructure
 
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenarioRunner
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
+import com.observeit.trafficgenerator.traffic.domain.TrafficWorkerControl
 import org.slf4j.LoggerFactory
 import org.springframework.context.SmartLifecycle
 import org.springframework.stereotype.Component
@@ -33,11 +34,18 @@ class TrafficWorkerCoordinator(
     private val selector: ScenarioSelector,
     private val properties: TrafficProperties,
     private val iterationDelayMs: Long = DEFAULT_ITERATION_DELAY_MS,
-) : SmartLifecycle {
+) : SmartLifecycle,
+    TrafficWorkerControl {
 
     private val logger = LoggerFactory.getLogger(TrafficWorkerCoordinator::class.java)
     private val running = AtomicBoolean(false)
     private val workerThreads = CopyOnWriteArrayList<Thread>()
+
+    override val concurrency: Int
+        get() = properties.workers.concurrency
+
+    override val ordersPerSecond: Double
+        get() = properties.ordersPerSecond
 
     override fun start() {
         if (!running.compareAndSet(false, true)) {
