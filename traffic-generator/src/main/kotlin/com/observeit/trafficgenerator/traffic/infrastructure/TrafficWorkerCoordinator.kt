@@ -15,15 +15,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Coordinates concurrent background traffic generator workers executing checkout scenarios.
  *
  * Architectural decisions:
- * 1. **Spring [SmartLifecycle]**: Manages worker startup and teardown bound to the Spring application
- *    context lifecycle. Configured with phase [Integer.MAX_VALUE] so workers start only after all other beans
- *    are fully initialized and healthy, and shut down gracefully before dependent beans are destroyed.
- * 2. **Java 21 Virtual Threads (JEP 444)**: Workers run as lightweight virtual threads via
- *    [Thread.ofVirtual], minimizing memory footprint and context-switch overhead across high concurrency.
- * 3. **Non-blocking Delay**: Uses [CompletableFuture.delayedExecutor] for inter-iteration pauses rather
- *    than blocking thread sleep, adhering to repository detekt rules (`ForbiddenMethodCall: java.lang.Thread.sleep`).
- * 4. **Cancellation**: Responds promptly to thread interrupts during shutdown via [AtomicBoolean] state checks
- *    and [InterruptedException] handling.
+ * 1. **Spring [SmartLifecycle]**
+ *    (https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html#beans-factory-lifecycle):
+ *    Manages worker startup and teardown bound to the Spring application context lifecycle. Configured with phase
+ *    [Integer.MAX_VALUE] so workers start only after all other beans are initialized and stop first on shutdown.
+ * 2. **Java Virtual Threads (JEP 444, https://openjdk.org/jeps/444)**: Workers run as lightweight virtual threads via
+ *    [Thread.ofVirtual], parking cheaply during outbound HTTP calls and inter-step delays.
+ * 3. **Non-blocking Delay**
+ *    (https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/CompletableFuture.html):
+ *    Uses [CompletableFuture.delayedExecutor] for inter-iteration pauses rather than `Thread.sleep`.
+ * 4. **Cancellation**: Responds to thread interrupts during shutdown via [AtomicBoolean] state checks and
+ *    [InterruptedException] handling.
  */
 @Component
 class TrafficWorkerCoordinator(

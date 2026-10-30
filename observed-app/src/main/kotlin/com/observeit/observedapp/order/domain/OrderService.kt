@@ -2,6 +2,7 @@ package com.observeit.observedapp.order.domain
 
 import com.observeit.observedapp.correlation.CorrelationContext
 import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderTelemetry.Key
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
@@ -24,10 +25,10 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         val saved = orderRepository.save(order)
 
         logger.atInfo()
-            .addKeyValue("order.state", saved.state.name)
-            .addKeyValue("order.total_amount", saved.totalAmount.toDouble())
-            .addKeyValue("order.currency", saved.currency.currencyCode)
-            .addKeyValue("order.item_count", saved.itemCount)
+            .addKeyValue(Key.ORDER_STATE, saved.state.name)
+            .addKeyValue(Key.ORDER_TOTAL_AMOUNT, saved.totalAmount.toDouble())
+            .addKeyValue(Key.ORDER_CURRENCY, saved.currency.currencyCode)
+            .addKeyValue(Key.ORDER_ITEM_COUNT, saved.itemCount)
             .log("Order created")
 
         return saved
@@ -37,10 +38,10 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         val order = loadOrderWithCorrelation(orderId)
 
         logger.atInfo()
-            .addKeyValue("order.state", order.state.name)
-            .addKeyValue("order.total_amount", order.totalAmount.toDouble())
-            .addKeyValue("order.currency", order.currency.currencyCode)
-            .addKeyValue("order.item_count", order.itemCount)
+            .addKeyValue(Key.ORDER_STATE, order.state.name)
+            .addKeyValue(Key.ORDER_TOTAL_AMOUNT, order.totalAmount.toDouble())
+            .addKeyValue(Key.ORDER_CURRENCY, order.currency.currencyCode)
+            .addKeyValue(Key.ORDER_ITEM_COUNT, order.itemCount)
             .log("Order retrieved")
 
         return order
@@ -66,22 +67,22 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         reserved.items.forEach { item ->
             if (item.sku == SKU_LOW_STOCK) {
                 logger.atWarn()
-                    .addKeyValue("inventory.sku", item.sku)
-                    .addKeyValue("inventory.requested_quantity", item.quantity.toLong())
-                    .addKeyValue("inventory.available_quantity", LOW_STOCK_AVAILABLE_QUANTITY)
+                    .addKeyValue(Key.INVENTORY_SKU, item.sku)
+                    .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, item.quantity.toLong())
+                    .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, LOW_STOCK_AVAILABLE_QUANTITY)
                     .log("Low stock for ${item.sku} (${item.quantity}/$LOW_STOCK_AVAILABLE_QUANTITY)")
             } else {
                 logger.atDebug()
-                    .addKeyValue("inventory.sku", item.sku)
-                    .addKeyValue("inventory.requested_quantity", item.quantity.toLong())
-                    .addKeyValue("inventory.available_quantity", STANDARD_AVAILABLE_QUANTITY)
+                    .addKeyValue(Key.INVENTORY_SKU, item.sku)
+                    .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, item.quantity.toLong())
+                    .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, STANDARD_AVAILABLE_QUANTITY)
                     .log("Inventory reserved for ${item.sku} (${item.quantity}/$STANDARD_AVAILABLE_QUANTITY)")
             }
         }
 
         logger.atInfo()
-            .addKeyValue("order.state", reserved.state.name)
-            .addKeyValue("order.previous_state", previousState.name)
+            .addKeyValue(Key.ORDER_STATE, reserved.state.name)
+            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
             .log("Order reserved")
 
         return reserved
@@ -99,10 +100,10 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         orderRepository.save(paid)
 
         logger.atInfo()
-            .addKeyValue("order.state", paid.state.name)
-            .addKeyValue("order.previous_state", previousState.name)
-            .addKeyValue("payment.method", paymentMethod.name)
-            .addKeyValue("payment.latency_ms", STANDARD_PAYMENT_LATENCY_MS)
+            .addKeyValue(Key.ORDER_STATE, paid.state.name)
+            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
+            .addKeyValue(Key.PAYMENT_METHOD, paymentMethod.name)
+            .addKeyValue(Key.PAYMENT_LATENCY_MS, STANDARD_PAYMENT_LATENCY_MS)
             .log("Order paid")
 
         return paid
@@ -115,9 +116,9 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         val shipped = orderRepository.save(order.ship())
 
         logger.atInfo()
-            .addKeyValue("order.state", shipped.state.name)
-            .addKeyValue("order.previous_state", previousState.name)
-            .addKeyValue("shipping.method", shippingMethod.name)
+            .addKeyValue(Key.ORDER_STATE, shipped.state.name)
+            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
+            .addKeyValue(Key.SHIPPING_METHOD, shippingMethod.name)
             .log("Order shipped")
 
         return shipped
@@ -130,9 +131,9 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         val cancelled = orderRepository.save(order.cancel())
 
         logger.atInfo()
-            .addKeyValue("order.state", cancelled.state.name)
-            .addKeyValue("order.previous_state", previousState.name)
-            .addKeyValue("cancellation.reason", reason)
+            .addKeyValue(Key.ORDER_STATE, cancelled.state.name)
+            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
+            .addKeyValue(Key.CANCELLATION_REASON, reason)
             .log("Order cancelled")
 
         return cancelled

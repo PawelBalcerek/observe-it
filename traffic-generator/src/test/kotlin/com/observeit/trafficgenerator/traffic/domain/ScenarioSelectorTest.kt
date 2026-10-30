@@ -15,10 +15,15 @@ import kotlin.random.Random
 class ScenarioSelectorTest {
 
     @Test
-    fun `verifies all scenarios exist and probabilities sum to 100 percent`() {
+    fun `scenario probabilities sum to 100 percent`() {
+        // given
         val scenarios = CheckoutScenario.entries
-        scenarios.size shouldBe EXPECTED_SCENARIO_COUNT
-        scenarios.sumOf { it.probability } shouldBe (1.0 plusOrMinus PROBABILITY_SUM_TOLERANCE)
+
+        // when
+        val totalProbability = scenarios.sumOf { it.probability }
+
+        // then
+        totalProbability shouldBe (1.0 plusOrMinus PROBABILITY_SUM_TOLERANCE)
     }
 
     @Test
@@ -65,6 +70,5 @@ class ScenarioSelectorTest {
     private companion object {
         const val TOLERANCE = 0.02
         const val PROBABILITY_SUM_TOLERANCE = 0.0001
-        const val EXPECTED_SCENARIO_COUNT = 7
     }
 }

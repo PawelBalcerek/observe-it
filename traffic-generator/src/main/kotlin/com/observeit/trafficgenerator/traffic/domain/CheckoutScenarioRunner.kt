@@ -180,7 +180,7 @@ class CheckoutScenarioRunner(private val client: ObservedAppClient, private val 
         return order
     }
 
-    companion object {
+    private companion object {
         object Key {
             const val ORDER_ID = "order.id"
             const val ORDER_STATE = "order.state"

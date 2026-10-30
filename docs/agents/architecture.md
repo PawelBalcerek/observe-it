@@ -47,6 +47,7 @@ When a cross-cutting capability (such as request correlation or telemetry contex
 
 - **Context / Domain Support (`<concern>/`)**: Pure Kotlin types/functions (e.g., `MDC` attribute keys and context population helpers) with zero `jakarta.servlet.*` or `org.springframework.web.*` dependencies, safe for `domain` services to call directly.
 - **Transport Adapter (`<concern>/api/` or `<concern>/infrastructure/`)**: Servlet filters (`OncePerRequestFilter`) or interceptors that extract transport headers, delegate to the pure context helper, and guarantee cleanup in a `finally` block.
+- **`MDC` is write-only telemetry context**: Populate `MDC` so logs carry correlation attributes, and pass every business or transport value (scenario, order id, outbound headers) as an explicit parameter. Production code never reads a value back out of `MDC` to drive behaviour.
 
 ## 3. Lock-Free Concurrency & Shared State
 
@@ -71,4 +72,13 @@ Keep the qualifier where it carries meaning the bare name loses:
 ## 5. Kotlin Idioms & Visibility
 
 - **Exhaustive `when` expressions**: Branch on enums and sealed types with an exhaustive `when` listing every entry explicitly and without an `else` branch (enforced by Detekt `ElseCaseInsteadOfExhaustiveWhen`).
+- **`when` over `if` / `else if` chains**: Branch on a single subject (status code, type, enum) with a `when` expression.
 - **`private companion object` by default**: Mark every `companion object` holding class-internal constants `private companion object`. Widen a companion object only when it exposes factory methods (`ResponseDto.from(domain)`) or JUnit `@FieldSource` providers.
+- **Named constants, grouped by meaning**: Extract repeated literals in a production class or test fixture into named constants; when a class or feature holds several constants of different kinds (telemetry keys, states, error types), group them in nested `object` namespaces (`Key.ORDER_ID`, `OrderState.PAID`, `ErrorType.OUT_OF_STOCK`), and extract telemetry constants shared across multiple classes in a feature into a feature `domain` object (`OrderTelemetry`).
+- **No intermediate builder `@Bean`s**: When a `@Configuration` class builds a framework client (`RestClient`), construct it directly in one `@Bean` method rather than exposing an intermediate builder `@Bean` (`RestClient.Builder`) consumed only by that method.
+- **Fix before suppressing**: Change the code to satisfy a Detekt finding; keep an `@Suppress` only when the rule cannot fit the case (e.g. a `when` over the open-ended `HttpStatusCode`), scoped to the smallest declaration.
+
+## 6. Dead Code & Sources
+
+- **Every declaration has a caller**: Each class, function, property, `@Bean`, and fixture helper a PR adds is called from `main` (or, for `testFixtures`, from a test) in the same PR. Add a declaration in the ticket that first uses it, not ahead of time. Detekt catches unused *private* members; the Qodana CI job catches unused public and internal ones.
+- **KDoc cites verifiable sources**: KDoc explaining a non-trivial algorithm or framework mechanism (sampling, lifecycle phases, virtual threads) names the technique correctly and links a primary source (Javadoc, JEP, Spring reference, paper) by URL.

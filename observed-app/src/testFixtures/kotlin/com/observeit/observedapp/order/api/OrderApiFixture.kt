@@ -136,25 +136,25 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
 
     private fun createOrder(request: CreateOrderRequest, checkoutScenario: String? = null): ResponseSpec =
         restTestClient.post()
-            .uri("/api/orders")
+            .uri(ORDERS_PATH)
             .contentType(APPLICATION_JSON)
             .body(request)
             .withCheckoutScenario(checkoutScenario)
             .exchange()
 
     private fun getOrder(orderId: String, checkoutScenario: String? = null): ResponseSpec = restTestClient.get()
-        .uri("/api/orders/{orderId}", orderId)
+        .uri("$ORDERS_PATH/{orderId}", orderId)
         .withCheckoutScenario(checkoutScenario)
         .exchange()
 
     private fun reserveOrder(orderId: String, checkoutScenario: String? = null): ResponseSpec = restTestClient.post()
-        .uri("/api/orders/{orderId}/reserve", orderId)
+        .uri("$ORDERS_PATH/{orderId}/reserve", orderId)
         .withCheckoutScenario(checkoutScenario)
         .exchange()
 
     private fun payOrder(orderId: String, request: PayOrderRequest, checkoutScenario: String? = null): ResponseSpec =
         restTestClient.post()
-            .uri("/api/orders/{orderId}/pay", orderId)
+            .uri("$ORDERS_PATH/{orderId}/pay", orderId)
             .contentType(APPLICATION_JSON)
             .body(request)
             .withCheckoutScenario(checkoutScenario)
@@ -162,7 +162,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
 
     private fun shipOrder(orderId: String, request: ShipOrderRequest, checkoutScenario: String? = null): ResponseSpec =
         restTestClient.post()
-            .uri("/api/orders/{orderId}/ship", orderId)
+            .uri("$ORDERS_PATH/{orderId}/ship", orderId)
             .contentType(APPLICATION_JSON)
             .body(request)
             .withCheckoutScenario(checkoutScenario)
@@ -173,7 +173,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         request: CancelOrderRequest,
         checkoutScenario: String? = null,
     ): ResponseSpec = restTestClient.post()
-        .uri("/api/orders/{orderId}/cancel", orderId)
+        .uri("$ORDERS_PATH/{orderId}/cancel", orderId)
         .contentType(APPLICATION_JSON)
         .body(request)
         .withCheckoutScenario(checkoutScenario)
@@ -181,7 +181,7 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
 
     private fun <S : RequestHeadersSpec<S>> RequestHeadersSpec<S>.withCheckoutScenario(checkoutScenario: String?): S =
         if (checkoutScenario != null) {
-            header("X-Checkout-Scenario", checkoutScenario)
+            header(HEADER_CHECKOUT_SCENARIO, checkoutScenario)
         } else {
             @Suppress("UNCHECKED_CAST")
             this as S
@@ -206,4 +206,9 @@ class OrderApiFixture(private val restTestClient: RestTestClient) {
         checkNotNull(expectBody(bodyType).returnResult().responseBody) {
             "Expected non-null ${bodyType.simpleName} response body"
         }
+
+    private companion object {
+        const val ORDERS_PATH = "/api/orders"
+        const val HEADER_CHECKOUT_SCENARIO = "X-Checkout-Scenario"
+    }
 }

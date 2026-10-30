@@ -19,11 +19,6 @@ object CorrelationContext {
         MDC.put(CUSTOMER_ID, customerId)
     }
 
-    fun populateOrderCorrelation(orderId: String, customerId: String) {
-        MDC.put(ORDER_ID, orderId)
-        MDC.put(CUSTOMER_ID, customerId)
-    }
-
     fun clear() {
         MDC.clear()
     }

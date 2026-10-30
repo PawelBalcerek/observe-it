@@ -190,7 +190,7 @@ class RestObservedAppClient(private val restClient: RestClient) : ObservedAppCli
         StandardCharsets.UTF_8,
     )
 
-    companion object {
+    private companion object {
         const val HEADER_CHECKOUT_SCENARIO = "X-Checkout-Scenario"
     }
 }

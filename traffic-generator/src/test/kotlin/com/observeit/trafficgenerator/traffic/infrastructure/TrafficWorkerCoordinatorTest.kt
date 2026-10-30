@@ -11,7 +11,6 @@ import com.observeit.trafficgenerator.traffic.domain.ObservedAppClient
 import com.observeit.trafficgenerator.traffic.domain.OrderDetails
 import com.observeit.trafficgenerator.traffic.domain.PayOrderResult
 import com.observeit.trafficgenerator.traffic.domain.ReserveOrderResult
-import com.observeit.trafficgenerator.traffic.domain.ScenarioExecutionResult
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
 import com.observeit.trafficgenerator.traffic.domain.ShipOrderResult
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
@@ -30,26 +29,6 @@ class TrafficWorkerCoordinatorTest {
 
     private var coordinator: TrafficWorkerCoordinator? = null
 
-    private val dummyClient = object : ObservedAppClient {
-        override fun createOrder(scenario: CheckoutScenario, customerId: String, items: List<CreateOrderItem>) =
-            CreateOrderResult("order-1", customerId, "CREATED")
-
-        override fun reserveOrder(scenario: CheckoutScenario, orderId: String) =
-            ReserveOrderResult.Success(orderId, "RESERVED")
-
-        override fun payOrder(scenario: CheckoutScenario, orderId: String, paymentMethod: String) =
-            PayOrderResult.Success(orderId, "PAID")
-
-        override fun shipOrder(scenario: CheckoutScenario, orderId: String, shippingMethod: String) =
-            ShipOrderResult.Success(orderId, "SHIPPED", shippingMethod)
-
-        override fun cancelOrder(scenario: CheckoutScenario, orderId: String, reason: String) =
-            CancelOrderResult.Success(orderId, "CANCELLED", reason)
-
-        override fun getOrder(scenario: CheckoutScenario, orderId: String) =
-            OrderDetails(orderId, "cust-1", "SHIPPED", 10.0, "USD", 1)
-    }
-
     @AfterEach
     fun tearDown() {
         coordinator?.stop()
@@ -62,21 +41,15 @@ class TrafficWorkerCoordinatorTest {
         val virtualFlags = ConcurrentHashMap.newKeySet<Boolean>()
         val executionCount = AtomicInteger(0)
 
-        val runner = object : CheckoutScenarioRunner(dummyClient, NoOpStepPacer) {
-            override fun execute(scenario: CheckoutScenario): ScenarioExecutionResult {
+        val runner = CheckoutScenarioRunner(
+            client = recordingClient {
                 val currentThread = Thread.currentThread()
                 workerThreads.add(currentThread.name)
                 virtualFlags.add(currentThread.isVirtual)
                 executionCount.incrementAndGet()
-                return ScenarioExecutionResult(
-                    scenario = scenario,
-                    orderId = "order-1",
-                    customerId = "customer-1",
-                    finalState = "SHIPPED",
-                    success = true,
-                )
-            }
-        }
+            },
+            stepPacer = NoOpStepPacer,
+        )
 
         val selector = ScenarioSelector { HAPPY_PATH }
 
@@ -117,21 +90,14 @@ class TrafficWorkerCoordinatorTest {
         // given
         val executionAttempts = AtomicInteger(0)
 
-        val runner = object : CheckoutScenarioRunner(dummyClient, NoOpStepPacer) {
-            override fun execute(scenario: CheckoutScenario): ScenarioExecutionResult {
-                val count = executionAttempts.incrementAndGet()
-                if (count % 2 == 1) {
+        val runner = CheckoutScenarioRunner(
+            client = recordingClient {
+                if (executionAttempts.incrementAndGet() % 2 == 1) {
                     error("Simulated transient failure")
                 }
-                return ScenarioExecutionResult(
-                    scenario = scenario,
-                    orderId = "order-$count",
-                    customerId = "customer-1",
-                    finalState = "SHIPPED",
-                    success = true,
-                )
-            }
-        }
+            },
+            stepPacer = NoOpStepPacer,
+        )
 
         val selector = ScenarioSelector { HAPPY_PATH }
 
@@ -159,5 +125,36 @@ class TrafficWorkerCoordinatorTest {
             executionAttempts.get() shouldBeGreaterThanOrEqualTo 6
             coordinator!!.isRunning shouldBe true
         }
+    }
+
+    private fun recordingClient(onCreateOrder: () -> Unit): ObservedAppClient = object : ObservedAppClient {
+        override fun createOrder(
+            scenario: CheckoutScenario,
+            customerId: String,
+            items: List<CreateOrderItem>,
+        ): CreateOrderResult {
+            onCreateOrder()
+            return CreateOrderResult(ORDER_ID, customerId, "CREATED")
+        }
+
+        override fun reserveOrder(scenario: CheckoutScenario, orderId: String) =
+            ReserveOrderResult.Success(orderId, "RESERVED")
+
+        override fun payOrder(scenario: CheckoutScenario, orderId: String, paymentMethod: String) =
+            PayOrderResult.Success(orderId, "PAID")
+
+        override fun shipOrder(scenario: CheckoutScenario, orderId: String, shippingMethod: String) =
+            ShipOrderResult.Success(orderId, STATE_SHIPPED, shippingMethod)
+
+        override fun cancelOrder(scenario: CheckoutScenario, orderId: String, reason: String) =
+            CancelOrderResult.Success(orderId, "CANCELLED", reason)
+
+        override fun getOrder(scenario: CheckoutScenario, orderId: String) =
+            OrderDetails(orderId, "cust-1", STATE_SHIPPED, 10.0, "USD", 1)
+    }
+
+    private companion object {
+        const val ORDER_ID = "order-1"
+        const val STATE_SHIPPED = "SHIPPED"
     }
 }
