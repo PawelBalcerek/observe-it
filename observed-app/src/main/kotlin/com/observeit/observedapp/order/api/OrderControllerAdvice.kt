@@ -1,6 +1,8 @@
 package com.observeit.observedapp.order.api
 
 import com.observeit.observedapp.order.domain.InvalidOrderStateTransitionException
+import com.observeit.observedapp.order.domain.OrderTelemetry.ErrorType
+import com.observeit.observedapp.order.domain.OrderTelemetry.Key
 import com.observeit.observedapp.order.domain.OutOfStockException
 import com.observeit.observedapp.order.domain.PaymentDeclinedException
 import com.observeit.observedapp.order.domain.PaymentGatewayTimeoutException
@@ -24,8 +26,8 @@ class OrderControllerAdvice {
     @ExceptionHandler(InvalidOrderStateTransitionException::class)
     fun handleInvalidOrderStateTransitionException(exception: InvalidOrderStateTransitionException): ProblemDetail {
         logger.atWarn()
-            .addKeyValue("error.type", "INVALID_STATE_TRANSITION")
-            .addKeyValue("order.attempted_action", exception.attemptedAction)
+            .addKeyValue(Key.ERROR_TYPE, ErrorType.INVALID_STATE_TRANSITION)
+            .addKeyValue(Key.ORDER_ATTEMPTED_ACTION, exception.attemptedAction)
             .log("Cannot ${exception.attemptedAction} order in ${exception.state} state")
 
         val detail = exception.message ?: CONFLICT.reasonPhrase
@@ -35,10 +37,10 @@ class OrderControllerAdvice {
     @ExceptionHandler(OutOfStockException::class)
     fun handleOutOfStockException(exception: OutOfStockException): ProblemDetail {
         logger.atWarn()
-            .addKeyValue("error.type", "OUT_OF_STOCK")
-            .addKeyValue("inventory.sku", exception.sku)
-            .addKeyValue("inventory.requested_quantity", exception.requestedQuantity)
-            .addKeyValue("inventory.available_quantity", exception.availableQuantity)
+            .addKeyValue(Key.ERROR_TYPE, ErrorType.OUT_OF_STOCK)
+            .addKeyValue(Key.INVENTORY_SKU, exception.sku)
+            .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, exception.requestedQuantity)
+            .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, exception.availableQuantity)
             .log("Inventory out of stock for ${exception.sku}")
 
         val detail = exception.message ?: UNPROCESSABLE_CONTENT.reasonPhrase
@@ -48,9 +50,9 @@ class OrderControllerAdvice {
     @ExceptionHandler(PaymentDeclinedException::class)
     fun handlePaymentDeclinedException(exception: PaymentDeclinedException): ProblemDetail {
         logger.atWarn()
-            .addKeyValue("error.type", "PAYMENT_DECLINED")
-            .addKeyValue("payment.method", exception.paymentMethod.name)
-            .addKeyValue("payment.latency_ms", exception.latencyMs)
+            .addKeyValue(Key.ERROR_TYPE, ErrorType.PAYMENT_DECLINED)
+            .addKeyValue(Key.PAYMENT_METHOD, exception.paymentMethod.name)
+            .addKeyValue(Key.PAYMENT_LATENCY_MS, exception.latencyMs)
             .log("Payment declined for method ${exception.paymentMethod.name}")
 
         val detail = exception.message ?: UNPROCESSABLE_CONTENT.reasonPhrase
@@ -61,9 +63,9 @@ class OrderControllerAdvice {
     fun handlePaymentGatewayTimeoutException(exception: PaymentGatewayTimeoutException): ProblemDetail {
         logger.atError()
             .setCause(exception.cause ?: exception)
-            .addKeyValue("error.type", "GATEWAY_TIMEOUT")
-            .addKeyValue("payment.method", exception.paymentMethod.name)
-            .addKeyValue("payment.latency_ms", exception.latencyMs)
+            .addKeyValue(Key.ERROR_TYPE, ErrorType.GATEWAY_TIMEOUT)
+            .addKeyValue(Key.PAYMENT_METHOD, exception.paymentMethod.name)
+            .addKeyValue(Key.PAYMENT_LATENCY_MS, exception.latencyMs)
             .log("Payment gateway timed out for method ${exception.paymentMethod.name}")
 
         val detail = exception.message

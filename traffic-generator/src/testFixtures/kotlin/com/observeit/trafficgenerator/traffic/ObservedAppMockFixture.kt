@@ -21,13 +21,13 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectCreateOrder(
         scenario: CheckoutScenario,
-        expectedCustomerId: String = DEFAULT_CUSTOMER_ID,
-        returnOrderId: String = DEFAULT_ORDER_ID,
-        returnState: String = STATE_CREATED,
+        expectedCustomerId: String = Default.CUSTOMER_ID,
+        returnOrderId: String = Default.ORDER_ID,
+        returnState: String = State.CREATED,
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andRespond(
                 withStatus(CREATED)
                     .contentType(APPLICATION_JSON)
@@ -39,15 +39,15 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                             "state": "$returnState",
                             "items": [
                                 {
-                                    "sku": "sku",
+                                    "sku": "${Default.SKU}",
                                     "quantity": 1,
                                     "unitPrice": 10.00,
-                                    "currency": "USD"
+                                    "currency": "${Default.CURRENCY}"
                                 }
                             ],
                             "totalAmount": 10.00,
-                            "currency": "USD",
-                            "createdAt": "2026-10-30T12:00:00Z"
+                            "currency": "${Default.CURRENCY}",
+                            "createdAt": "${Default.CREATED_AT}"
                         }
                         """.trimIndent(),
                     ),
@@ -56,12 +56,12 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectReserveOrder200(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        returnState: String = STATE_RESERVED,
+        orderId: String = Default.ORDER_ID,
+        returnState: String = State.RESERVED,
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/reserve"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/reserve"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andRespond(
                 withSuccess(
                     """
@@ -77,12 +77,12 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectReserveOrder422(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
+        orderId: String = Default.ORDER_ID,
         detail: String = "Requested quantity exceeds available stock",
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/reserve"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/reserve"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andRespond(
                 withStatus(UNPROCESSABLE_CONTENT)
                     .contentType(APPLICATION_JSON)
@@ -90,31 +90,25 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                         """
                         {
                             "type": "https://observeit.com/errors/out-of-stock",
-                            "title": "Unprocessable Content",
+                            "title": "$TITLE_UNPROCESSABLE_CONTENT",
                             "status": 422,
                             "detail": "$detail",
-                            "instance": "$ORDERS_PATH/$orderId/reserve"
+                            "instance": "${Endpoint.ORDERS_PATH}/$orderId/reserve"
                         }
                         """.trimIndent(),
                     ),
             )
     }
 
-    fun expectReserveOrder422OutOfStock(
-        scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        detail: String = "Requested quantity exceeds available stock",
-    ) = expectReserveOrder422(scenario, orderId, detail)
-
     fun expectPayOrder200(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        paymentMethod: String = "CREDIT_CARD",
-        returnState: String = STATE_PAID,
+        orderId: String = Default.ORDER_ID,
+        paymentMethod: String = Default.PAYMENT_CREDIT_CARD,
+        returnState: String = State.PAID,
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/pay"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/pay"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
             .andRespond(
                 withSuccess(
@@ -131,13 +125,13 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectPayOrder422(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
+        orderId: String = Default.ORDER_ID,
         paymentMethod: String = "DECLINED_CARD",
         detail: String = "Payment was declined by card issuer",
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/pay"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/pay"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
             .andRespond(
                 withStatus(UNPROCESSABLE_CONTENT)
@@ -146,32 +140,25 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                         """
                         {
                             "type": "https://observeit.com/errors/payment-declined",
-                            "title": "Unprocessable Content",
+                            "title": "$TITLE_UNPROCESSABLE_CONTENT",
                             "status": 422,
                             "detail": "$detail",
-                            "instance": "$ORDERS_PATH/$orderId/pay"
+                            "instance": "${Endpoint.ORDERS_PATH}/$orderId/pay"
                         }
                         """.trimIndent(),
                     ),
             )
     }
 
-    fun expectPayOrder422Declined(
-        scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        paymentMethod: String = "DECLINED_CARD",
-        detail: String = "Payment was declined by card issuer",
-    ) = expectPayOrder422(scenario, orderId, paymentMethod, detail)
-
     fun expectPayOrder504(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
+        orderId: String = Default.ORDER_ID,
         paymentMethod: String = "TIMEOUT_GATEWAY",
         detail: String = "Payment gateway timed out after 3000ms",
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/pay"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/pay"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
             .andRespond(
                 withStatus(GATEWAY_TIMEOUT)
@@ -183,29 +170,22 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                             "title": "Gateway Timeout",
                             "status": 504,
                             "detail": "$detail",
-                            "instance": "$ORDERS_PATH/$orderId/pay"
+                            "instance": "${Endpoint.ORDERS_PATH}/$orderId/pay"
                         }
                         """.trimIndent(),
                     ),
             )
     }
 
-    fun expectPayOrder504Timeout(
-        scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        paymentMethod: String = "TIMEOUT_GATEWAY",
-        detail: String = "Payment gateway timed out after 3000ms",
-    ) = expectPayOrder504(scenario, orderId, paymentMethod, detail)
-
     fun expectPayOrder409(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        paymentMethod: String = "CREDIT_CARD",
+        orderId: String = Default.ORDER_ID,
+        paymentMethod: String = Default.PAYMENT_CREDIT_CARD,
         detail: String = "Cannot pay order in CANCELLED state",
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/pay"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/pay"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
             .andRespond(
                 withStatus(CONFLICT)
@@ -217,29 +197,22 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                             "title": "Conflict",
                             "status": 409,
                             "detail": "$detail",
-                            "instance": "$ORDERS_PATH/$orderId/pay"
+                            "instance": "${Endpoint.ORDERS_PATH}/$orderId/pay"
                         }
                         """.trimIndent(),
                     ),
             )
     }
 
-    fun expectPayOrder409Conflict(
-        scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        paymentMethod: String = "CREDIT_CARD",
-        detail: String = "Cannot pay order in CANCELLED state",
-    ) = expectPayOrder409(scenario, orderId, paymentMethod, detail)
-
     fun expectShipOrder200(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
+        orderId: String = Default.ORDER_ID,
         shippingMethod: String = "STANDARD",
-        returnState: String = STATE_SHIPPED,
+        returnState: String = State.SHIPPED,
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/ship"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/ship"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"shippingMethod": "$shippingMethod"}"""))
             .andRespond(
                 withSuccess(
@@ -257,13 +230,13 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectCancelOrder200(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
+        orderId: String = Default.ORDER_ID,
         reason: String = "buyer cancellation request",
-        returnState: String = STATE_CANCELLED,
+        returnState: String = State.CANCELLED,
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/cancel"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/cancel"))
             .andExpect(method(POST))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"reason": "$reason"}"""))
             .andRespond(
                 withSuccess(
@@ -281,13 +254,13 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectGetOrder200(
         scenario: CheckoutScenario,
-        orderId: String = DEFAULT_ORDER_ID,
-        state: String = STATE_SHIPPED,
-        customerId: String = DEFAULT_CUSTOMER_ID,
+        orderId: String = Default.ORDER_ID,
+        state: String = State.SHIPPED,
+        customerId: String = Default.CUSTOMER_ID,
     ) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId"))
             .andExpect(method(GET))
-            .andExpect(header(HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andRespond(
                 withSuccess(
                     """
@@ -297,15 +270,15 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                         "state": "$state",
                         "items": [
                             {
-                                "sku": "sku",
+                                "sku": "${Default.SKU}",
                                 "quantity": 1,
                                 "unitPrice": 10.00,
-                                "currency": "USD"
+                                "currency": "${Default.CURRENCY}"
                             }
                         ],
                         "totalAmount": 10.00,
-                        "currency": "USD",
-                        "createdAt": "2026-10-30T12:00:00Z"
+                        "currency": "${Default.CURRENCY}",
+                        "createdAt": "${Default.CREATED_AT}"
                     }
                     """.trimIndent(),
                     APPLICATION_JSON,
@@ -314,37 +287,37 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
     }
 
     fun expectCreateOrder500() {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH"))
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}"))
             .andExpect(method(POST))
             .andRespond(withStatus(INTERNAL_SERVER_ERROR))
     }
 
-    fun expectReserveOrder500(orderId: String = DEFAULT_ORDER_ID) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/reserve"))
+    fun expectReserveOrder500(orderId: String = Default.ORDER_ID) {
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/reserve"))
             .andExpect(method(POST))
             .andRespond(withStatus(INTERNAL_SERVER_ERROR))
     }
 
-    fun expectPayOrder500(orderId: String = DEFAULT_ORDER_ID) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/pay"))
+    fun expectPayOrder500(orderId: String = Default.ORDER_ID) {
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/pay"))
             .andExpect(method(POST))
             .andRespond(withStatus(INTERNAL_SERVER_ERROR))
     }
 
-    fun expectShipOrder500(orderId: String = DEFAULT_ORDER_ID) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/ship"))
+    fun expectShipOrder500(orderId: String = Default.ORDER_ID) {
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/ship"))
             .andExpect(method(POST))
             .andRespond(withStatus(INTERNAL_SERVER_ERROR))
     }
 
-    fun expectCancelOrder500(orderId: String = DEFAULT_ORDER_ID) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId/cancel"))
+    fun expectCancelOrder500(orderId: String = Default.ORDER_ID) {
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/cancel"))
             .andExpect(method(POST))
             .andRespond(withStatus(INTERNAL_SERVER_ERROR))
     }
 
-    fun expectGetOrder500(orderId: String = DEFAULT_ORDER_ID) {
-        mockServer.expect(requestTo("$BASE_URL$ORDERS_PATH/$orderId"))
+    fun expectGetOrder500(orderId: String = Default.ORDER_ID) {
+        mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId"))
             .andExpect(method(GET))
             .andRespond(withStatus(INTERNAL_SERVER_ERROR))
     }
@@ -353,16 +326,30 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         mockServer.verify()
     }
 
-    companion object {
-        const val HEADER_CHECKOUT_SCENARIO = "X-Checkout-Scenario"
-        const val BASE_URL = "http://localhost:8080"
-        const val ORDERS_PATH = "/api/orders"
-        const val DEFAULT_ORDER_ID = "order-123"
-        const val DEFAULT_CUSTOMER_ID = "customerId"
-        const val STATE_CREATED = "CREATED"
-        const val STATE_RESERVED = "RESERVED"
-        const val STATE_PAID = "PAID"
-        const val STATE_SHIPPED = "SHIPPED"
-        const val STATE_CANCELLED = "CANCELLED"
+    private companion object {
+        object Endpoint {
+            const val HEADER_CHECKOUT_SCENARIO = "X-Checkout-Scenario"
+            const val BASE_URL = "http://localhost:8080"
+            const val ORDERS_PATH = "/api/orders"
+        }
+
+        object State {
+            const val CREATED = "CREATED"
+            const val RESERVED = "RESERVED"
+            const val PAID = "PAID"
+            const val SHIPPED = "SHIPPED"
+            const val CANCELLED = "CANCELLED"
+        }
+
+        object Default {
+            const val ORDER_ID = "order-123"
+            const val CUSTOMER_ID = "customerId"
+            const val SKU = "sku"
+            const val CURRENCY = "USD"
+            const val CREATED_AT = "2026-10-30T12:00:00Z"
+            const val PAYMENT_CREDIT_CARD = "CREDIT_CARD"
+        }
+
+        const val TITLE_UNPROCESSABLE_CONTENT = "Unprocessable Content"
     }
 }

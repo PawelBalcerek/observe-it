@@ -29,7 +29,7 @@ Awaitility. Read before writing or modifying any test or test fixture. See `docs
 
 ### Code formatting & static analysis (ktlint & detekt)
 
-Ktlint (`org.jlleitschuh.gradle.ktlint`) and Detekt (`dev.detekt`, configured in `config/detekt/detekt.yml`) are wired into `./gradlew check`. Before committing any changes, run `./gradlew check` and format with `./gradlew ktlintFormat` if needed.
+Ktlint (`org.jlleitschuh.gradle.ktlint`) and Detekt (`dev.detekt`, configured in `config/detekt/detekt.yml`) are wired into `./gradlew check`; Qodana (`qodana.yaml`) flags unused declarations in CI. Before committing any changes, run `./gradlew check` and format with `./gradlew ktlintFormat` if needed. Reviews check diffs against `CODING_STANDARDS.md`.
 
 ### Git & PR workflow
 

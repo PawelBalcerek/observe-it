@@ -1,0 +1,10 @@
+name: "UnusedSymbolOnly"
+
+inspections:
+  - group: ALL
+    enabled: false
+  - inspection: UnusedSymbol
+    enabled: true
+    ignore:
+      - "build-logic/**"
+      - "**/*Controller.kt"

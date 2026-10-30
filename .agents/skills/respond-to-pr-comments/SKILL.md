@@ -33,6 +33,12 @@ resolved** while threads still under discussion stay open.
    reply. Iterate in chat until every thread has an agreed outcome: _fix_, _drop_ (agreed not to change, with the
    reason), or _open_ (keep discussing later).
 
+   - **Sources**: when a comment asks for a source or for proof that something is correct, answer with a verifiable
+     link (Javadoc, JEP, Spring reference, paper) found through the `research` skill or a web search, and quote the line
+     that supports the claim. Cite only what you have opened.
+   - **Sweep**: when a comment names one instance of a problem ("is it used?", "could be a const"), list every other
+     instance of the same problem in the PR diff and include them in the proposed fix.
+
    Classify every human reply. An **approval** is a bare yes to the whole plan as last presented ("good", "ok", "yes",
    "go ahead", "I accept"). Anything else is an **amendment**: a suggestion, question, condition, alternative, "wdyt",
    or "yes, but…", even when the rest of the reply approves. On an amendment, fold it into the plan, restate the full

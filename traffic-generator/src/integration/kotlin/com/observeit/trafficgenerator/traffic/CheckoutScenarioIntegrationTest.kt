@@ -14,6 +14,7 @@ import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.OUT_OF_STO
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_DECLINED
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_GATEWAY_TIMEOUT
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenarioRunner
+import com.observeit.trafficgenerator.traffic.domain.ScenarioExecutionResult
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -65,18 +66,21 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
         val orderId = "order-happy"
         mockFixture.expectCreateOrder(scenario = HAPPY_PATH, returnOrderId = orderId)
         mockFixture.expectReserveOrder200(scenario = HAPPY_PATH, orderId = orderId)
-        mockFixture.expectPayOrder200(scenario = HAPPY_PATH, orderId = orderId, paymentMethod = "CREDIT_CARD")
-        mockFixture.expectShipOrder200(scenario = HAPPY_PATH, orderId = orderId, shippingMethod = "STANDARD")
-        mockFixture.expectGetOrder200(scenario = HAPPY_PATH, orderId = orderId, state = "SHIPPED")
+        mockFixture.expectPayOrder200(scenario = HAPPY_PATH, orderId = orderId)
+        mockFixture.expectShipOrder200(scenario = HAPPY_PATH, orderId = orderId)
+        mockFixture.expectGetOrder200(scenario = HAPPY_PATH, orderId = orderId)
 
         // when
         val result = runner.execute(HAPPY_PATH)
 
         // then
-        result.scenario shouldBe HAPPY_PATH
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "SHIPPED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = HAPPY_PATH,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.SHIPPED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -84,22 +88,22 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         // and
         val expectedMdc = mapOf(
-            "checkout.scenario" to "HAPPY_PATH",
-            "order.id" to orderId,
-            "customer.id" to result.customerId,
+            Key.CHECKOUT_SCENARIO to "HAPPY_PATH",
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to result.customerId,
         )
 
         logCapture.assertLogged(
             level = INFO,
             message = "Order created",
-            keyValues = mapOf("order.id" to orderId, "order.state" to "CREATED"),
+            keyValues = mapOf(Key.ORDER_ID to orderId, Key.ORDER_STATE to State.CREATED),
             mdc = expectedMdc,
         )
 
         logCapture.assertLogged(
             level = INFO,
             message = "Order reserved",
-            keyValues = mapOf("order.state" to "RESERVED", "order.previous_state" to "CREATED"),
+            keyValues = mapOf(Key.ORDER_STATE to State.RESERVED, Key.ORDER_PREVIOUS_STATE to State.CREATED),
             mdc = expectedMdc,
         )
 
@@ -107,9 +111,9 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
             level = INFO,
             message = "Order paid",
             keyValues = mapOf(
-                "order.state" to "PAID",
-                "order.previous_state" to "RESERVED",
-                "payment.method" to "CREDIT_CARD",
+                Key.ORDER_STATE to State.PAID,
+                Key.ORDER_PREVIOUS_STATE to State.RESERVED,
+                Key.PAYMENT_METHOD to Method.CREDIT_CARD,
             ),
             mdc = expectedMdc,
         )
@@ -118,21 +122,21 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
             level = INFO,
             message = "Order shipped",
             keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.previous_state" to "PAID",
-                "shipping.method" to "STANDARD",
+                Key.ORDER_STATE to State.SHIPPED,
+                Key.ORDER_PREVIOUS_STATE to State.PAID,
+                "shipping.method" to Method.STANDARD,
             ),
             mdc = expectedMdc,
         )
 
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = Message.ORDER_RETRIEVED,
             keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
+                Key.ORDER_STATE to State.SHIPPED,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
             ),
             mdc = expectedMdc,
         )
@@ -144,18 +148,21 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
         val orderId = "order-low-stock"
         mockFixture.expectCreateOrder(scenario = LOW_STOCK_WARNING, returnOrderId = orderId)
         mockFixture.expectReserveOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
-        mockFixture.expectPayOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId, paymentMethod = "CREDIT_CARD")
-        mockFixture.expectShipOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId, shippingMethod = "STANDARD")
-        mockFixture.expectGetOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId, state = "SHIPPED")
+        mockFixture.expectPayOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
+        mockFixture.expectShipOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
+        mockFixture.expectGetOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
 
         // when
         val result = runner.execute(LOW_STOCK_WARNING)
 
         // then
-        result.scenario shouldBe LOW_STOCK_WARNING
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "SHIPPED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = LOW_STOCK_WARNING,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.SHIPPED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -172,16 +179,19 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
             orderId = orderId,
             detail = "Inventory out of stock for SKU-OUT-OF-STOCK",
         )
-        mockFixture.expectGetOrder200(scenario = OUT_OF_STOCK, orderId = orderId, state = "FAILED")
+        mockFixture.expectGetOrder200(scenario = OUT_OF_STOCK, orderId = orderId, state = State.FAILED)
 
         // when
         val result = runner.execute(OUT_OF_STOCK)
 
         // then
-        result.scenario shouldBe OUT_OF_STOCK
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "FAILED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = OUT_OF_STOCK,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.FAILED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -189,16 +199,16 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         // and
         val expectedMdc = mapOf(
-            "checkout.scenario" to "OUT_OF_STOCK",
-            "order.id" to orderId,
-            "customer.id" to result.customerId,
+            Key.CHECKOUT_SCENARIO to "OUT_OF_STOCK",
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to result.customerId,
         )
 
         logCapture.assertLogged(
             level = WARN,
             message = "Order reservation failed due to out of stock",
             keyValues = mapOf(
-                "error.type" to "OUT_OF_STOCK",
+                Key.ERROR_TYPE to "OUT_OF_STOCK",
                 "inventory.sku" to "SKU-OUT-OF-STOCK",
             ),
             mdc = expectedMdc,
@@ -206,12 +216,12 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = Message.ORDER_RETRIEVED,
             keyValues = mapOf(
-                "order.state" to "FAILED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
+                Key.ORDER_STATE to State.FAILED,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
             ),
             mdc = expectedMdc,
         )
@@ -226,19 +236,21 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
         mockFixture.expectPayOrder422(
             scenario = PAYMENT_DECLINED,
             orderId = orderId,
-            paymentMethod = "DECLINED_CARD",
-            detail = "Payment declined for method DECLINED_CARD",
+            detail = Message.PAYMENT_DECLINED,
         )
-        mockFixture.expectGetOrder200(scenario = PAYMENT_DECLINED, orderId = orderId, state = "FAILED")
+        mockFixture.expectGetOrder200(scenario = PAYMENT_DECLINED, orderId = orderId, state = State.FAILED)
 
         // when
         val result = runner.execute(PAYMENT_DECLINED)
 
         // then
-        result.scenario shouldBe PAYMENT_DECLINED
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "FAILED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = PAYMENT_DECLINED,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.FAILED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -246,29 +258,29 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         // and
         val expectedMdc = mapOf(
-            "checkout.scenario" to "PAYMENT_DECLINED",
-            "order.id" to orderId,
-            "customer.id" to result.customerId,
+            Key.CHECKOUT_SCENARIO to "PAYMENT_DECLINED",
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to result.customerId,
         )
 
         logCapture.assertLogged(
             level = WARN,
-            message = "Payment declined for method DECLINED_CARD",
+            message = Message.PAYMENT_DECLINED,
             keyValues = mapOf(
-                "error.type" to "PAYMENT_DECLINED",
-                "payment.method" to "DECLINED_CARD",
+                Key.ERROR_TYPE to "PAYMENT_DECLINED",
+                Key.PAYMENT_METHOD to Method.DECLINED_CARD,
             ),
             mdc = expectedMdc,
         )
 
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = Message.ORDER_RETRIEVED,
             keyValues = mapOf(
-                "order.state" to "FAILED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
+                Key.ORDER_STATE to State.FAILED,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
             ),
             mdc = expectedMdc,
         )
@@ -283,19 +295,21 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
         mockFixture.expectPayOrder504(
             scenario = PAYMENT_GATEWAY_TIMEOUT,
             orderId = orderId,
-            paymentMethod = "TIMEOUT_GATEWAY",
-            detail = "Payment gateway timed out",
+            detail = Message.PAYMENT_GATEWAY_TIMEOUT,
         )
-        mockFixture.expectGetOrder200(scenario = PAYMENT_GATEWAY_TIMEOUT, orderId = orderId, state = "FAILED")
+        mockFixture.expectGetOrder200(scenario = PAYMENT_GATEWAY_TIMEOUT, orderId = orderId, state = State.FAILED)
 
         // when
         val result = runner.execute(PAYMENT_GATEWAY_TIMEOUT)
 
         // then
-        result.scenario shouldBe PAYMENT_GATEWAY_TIMEOUT
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "FAILED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = PAYMENT_GATEWAY_TIMEOUT,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.FAILED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -303,29 +317,29 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         // and
         val expectedMdc = mapOf(
-            "checkout.scenario" to "PAYMENT_GATEWAY_TIMEOUT",
-            "order.id" to orderId,
-            "customer.id" to result.customerId,
+            Key.CHECKOUT_SCENARIO to "PAYMENT_GATEWAY_TIMEOUT",
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to result.customerId,
         )
 
         logCapture.assertLogged(
             level = ERROR,
-            message = "Payment gateway timed out",
+            message = Message.PAYMENT_GATEWAY_TIMEOUT,
             keyValues = mapOf(
-                "error.type" to "GATEWAY_TIMEOUT",
-                "payment.method" to "TIMEOUT_GATEWAY",
+                Key.ERROR_TYPE to "GATEWAY_TIMEOUT",
+                Key.PAYMENT_METHOD to Method.TIMEOUT_GATEWAY,
             ),
             mdc = expectedMdc,
         )
 
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = Message.ORDER_RETRIEVED,
             keyValues = mapOf(
-                "order.state" to "FAILED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
+                Key.ORDER_STATE to State.FAILED,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
             ),
             mdc = expectedMdc,
         )
@@ -337,21 +351,20 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
         val orderId = "order-cancellation"
         mockFixture.expectCreateOrder(scenario = BUYER_CANCELLATION, returnOrderId = orderId)
         mockFixture.expectReserveOrder200(scenario = BUYER_CANCELLATION, orderId = orderId)
-        mockFixture.expectCancelOrder200(
-            scenario = BUYER_CANCELLATION,
-            orderId = orderId,
-            reason = "buyer cancellation request",
-        )
-        mockFixture.expectGetOrder200(scenario = BUYER_CANCELLATION, orderId = orderId, state = "CANCELLED")
+        mockFixture.expectCancelOrder200(scenario = BUYER_CANCELLATION, orderId = orderId)
+        mockFixture.expectGetOrder200(scenario = BUYER_CANCELLATION, orderId = orderId, state = State.CANCELLED)
 
         // when
         val result = runner.execute(BUYER_CANCELLATION)
 
         // then
-        result.scenario shouldBe BUYER_CANCELLATION
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "CANCELLED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = BUYER_CANCELLATION,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.CANCELLED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -359,17 +372,17 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         // and
         val expectedMdc = mapOf(
-            "checkout.scenario" to "BUYER_CANCELLATION",
-            "order.id" to orderId,
-            "customer.id" to result.customerId,
+            Key.CHECKOUT_SCENARIO to "BUYER_CANCELLATION",
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to result.customerId,
         )
 
         logCapture.assertLogged(
             level = INFO,
             message = "Order cancelled",
             keyValues = mapOf(
-                "order.state" to "CANCELLED",
-                "order.previous_state" to "RESERVED",
+                Key.ORDER_STATE to State.CANCELLED,
+                Key.ORDER_PREVIOUS_STATE to State.RESERVED,
                 "cancellation.reason" to "buyer cancellation request",
             ),
             mdc = expectedMdc,
@@ -377,12 +390,12 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = Message.ORDER_RETRIEVED,
             keyValues = mapOf(
-                "order.state" to "CANCELLED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
+                Key.ORDER_STATE to State.CANCELLED,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
             ),
             mdc = expectedMdc,
         )
@@ -402,18 +415,21 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
         mockFixture.expectPayOrder409(
             scenario = INVALID_STATE_TRANSITION,
             orderId = orderId,
-            detail = "Cannot pay order in CANCELLED state",
+            detail = Message.INVALID_PAY_TRANSITION,
         )
-        mockFixture.expectGetOrder200(scenario = INVALID_STATE_TRANSITION, orderId = orderId, state = "CANCELLED")
+        mockFixture.expectGetOrder200(scenario = INVALID_STATE_TRANSITION, orderId = orderId, state = State.CANCELLED)
 
         // when
         val result = runner.execute(INVALID_STATE_TRANSITION)
 
         // then
-        result.scenario shouldBe INVALID_STATE_TRANSITION
-        result.orderId shouldBe orderId
-        result.finalState shouldBe "CANCELLED"
-        result.success shouldBe true
+        result shouldBe ScenarioExecutionResult(
+            scenario = INVALID_STATE_TRANSITION,
+            orderId = orderId,
+            customerId = result.customerId,
+            finalState = State.CANCELLED,
+            success = true,
+        )
         mockFixture.verify()
 
         // and
@@ -421,16 +437,16 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         // and
         val expectedMdc = mapOf(
-            "checkout.scenario" to "INVALID_STATE_TRANSITION",
-            "order.id" to orderId,
-            "customer.id" to result.customerId,
+            Key.CHECKOUT_SCENARIO to "INVALID_STATE_TRANSITION",
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to result.customerId,
         )
 
         logCapture.assertLogged(
             level = WARN,
-            message = "Cannot pay order in CANCELLED state",
+            message = Message.INVALID_PAY_TRANSITION,
             keyValues = mapOf(
-                "error.type" to "INVALID_STATE_TRANSITION",
+                Key.ERROR_TYPE to "INVALID_STATE_TRANSITION",
                 "order.attempted_action" to "pay",
             ),
             mdc = expectedMdc,
@@ -438,14 +454,55 @@ class CheckoutScenarioIntegrationTest @Autowired constructor(
 
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = Message.ORDER_RETRIEVED,
             keyValues = mapOf(
-                "order.state" to "CANCELLED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
+                Key.ORDER_STATE to State.CANCELLED,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
             ),
             mdc = expectedMdc,
         )
+    }
+
+    private companion object {
+        object Key {
+            const val CHECKOUT_SCENARIO = "checkout.scenario"
+            const val ORDER_ID = "order.id"
+            const val CUSTOMER_ID = "customer.id"
+            const val ORDER_STATE = "order.state"
+            const val ORDER_PREVIOUS_STATE = "order.previous_state"
+            const val ORDER_TOTAL_AMOUNT = "order.total_amount"
+            const val ORDER_CURRENCY = "order.currency"
+            const val ORDER_ITEM_COUNT = "order.item_count"
+            const val PAYMENT_METHOD = "payment.method"
+            const val ERROR_TYPE = "error.type"
+        }
+
+        object State {
+            const val CREATED = "CREATED"
+            const val RESERVED = "RESERVED"
+            const val PAID = "PAID"
+            const val SHIPPED = "SHIPPED"
+            const val CANCELLED = "CANCELLED"
+            const val FAILED = "FAILED"
+        }
+
+        object Method {
+            const val CREDIT_CARD = "CREDIT_CARD"
+            const val DECLINED_CARD = "DECLINED_CARD"
+            const val TIMEOUT_GATEWAY = "TIMEOUT_GATEWAY"
+            const val STANDARD = "STANDARD"
+        }
+
+        object Message {
+            const val ORDER_RETRIEVED = "Order retrieved"
+            const val PAYMENT_DECLINED = "Payment declined for method DECLINED_CARD"
+            const val PAYMENT_GATEWAY_TIMEOUT = "Payment gateway timed out"
+            const val INVALID_PAY_TRANSITION = "Cannot pay order in CANCELLED state"
+        }
+
+        const val CURRENCY_USD = "USD"
+        const val DEFAULT_TOTAL_AMOUNT = 10.0
     }
 }
