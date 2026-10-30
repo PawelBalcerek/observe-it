@@ -1,0 +1,3 @@
+traffic:
+  workers:
+    enabled: false

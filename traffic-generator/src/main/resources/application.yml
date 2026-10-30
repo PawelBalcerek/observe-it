@@ -5,6 +5,14 @@ spring:
     virtual:
       enabled: true
 
+traffic:
+  observed-app-url: "http://localhost:8080"
+  workers:
+    enabled: true
+    concurrency: 3
+    min-jitter-ms: 100
+    max-jitter-ms: 500
+
 server:
   port: 8081
 
