@@ -1,9 +1,0 @@
-version: "1.0"
-linter: qodana-jvm-community
-
-profile:
-  path: .qodana/profile.yaml
-
-failureConditions:
-  severityThresholds:
-    any: 0

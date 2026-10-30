@@ -80,5 +80,5 @@ Keep the qualifier where it carries meaning the bare name loses:
 
 ## 6. Dead Code & Sources
 
-- **Every declaration has a caller**: Each class, function, property, `@Bean`, and fixture helper a PR adds is called from `main` (or, for `testFixtures`, from a test) in the same PR. Add a declaration in the ticket that first uses it, not ahead of time. Detekt catches unused *private* members; the Qodana CI job catches unused public and internal ones.
+- **Every declaration has a caller**: Each class, function, property, `@Bean`, and fixture helper a PR adds is called from `main` (or, for `testFixtures`, from a test) in the same PR. Add a declaration in the ticket that first uses it, not ahead of time. Detekt catches unused *private* members; PR code review checks public and internal declarations for callers.
 - **KDoc cites verifiable sources**: KDoc explaining a non-trivial algorithm or framework mechanism (sampling, lifecycle phases, virtual threads) names the technique correctly and links a primary source (Javadoc, JEP, Spring reference, paper) by URL.

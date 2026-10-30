@@ -11,14 +11,12 @@ sample:
 
 ## Enforced by tooling
 
-Skip anything already enforced by `./gradlew check` (Ktlint and Detekt in [`config/detekt/detekt.yml`](config/detekt/detekt.yml))
-or by the Qodana CI job ([`qodana.yaml`](qodana.yaml)).
+Skip anything already enforced by `./gradlew check` (Ktlint and Detekt in [`config/detekt/detekt.yml`](config/detekt/detekt.yml)).
 
 ## Review-only checks
 
 Run both checks on the diff during review:
 
-- **Callers**: for every declaration the diff adds, grep for a caller (`docs/agents/architecture.md` §6). Qodana runs in
-  CI only, so review is the first line.
+- **Callers**: for every declaration the diff adds, grep for a caller (`docs/agents/architecture.md` §6).
 - **Suppressions**: list every `@Suppress` the diff adds and judge whether the code should change instead
   (`docs/agents/architecture.md` §5).
