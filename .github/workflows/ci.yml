@@ -55,17 +55,3 @@ jobs:
 
       - name: Auto-merge Dependabot PRs
         uses: allegro-actions/dependabot-automerge@aeb9c49a533f4cdf535264da664107b0c1841b2e # v1
-
-  qodana:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Qodana Scan
-        uses: JetBrains/qodana-action@3e8d76ff0e0241618abd808682f426afe84bab3f # v2026.2.2
-        with:
-          pr-mode: false
-          use-caches: ${{ inputs.build-cache != 'disabled' }}

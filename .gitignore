@@ -2,8 +2,7 @@
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
-.idea/*
-!.idea/misc.xml
+.idea/
 *.iml
 .DS_Store
 wip
