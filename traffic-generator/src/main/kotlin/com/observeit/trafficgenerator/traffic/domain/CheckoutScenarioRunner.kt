@@ -14,7 +14,11 @@ import java.math.BigDecimal
 import java.util.UUID
 
 @Service
-class CheckoutScenarioRunner(private val client: ObservedAppClient, private val stepPacer: StepPacer = NoOpStepPacer) {
+class CheckoutScenarioRunner(
+    private val client: ObservedAppClient,
+    private val stepPacer: StepPacer = NoOpStepPacer,
+    private val counters: ScenarioExecutionCounters = ScenarioExecutionCounters(),
+) {
 
     private val logger = LoggerFactory.getLogger(CheckoutScenarioRunner::class.java)
 
@@ -33,6 +37,7 @@ class CheckoutScenarioRunner(private val client: ObservedAppClient, private val 
             }
 
             val finalOrder = retrieveFinalOrder(scenario, orderId)
+            counters.increment(scenario)
             return ScenarioExecutionResult(
                 scenario = scenario,
                 orderId = orderId,
