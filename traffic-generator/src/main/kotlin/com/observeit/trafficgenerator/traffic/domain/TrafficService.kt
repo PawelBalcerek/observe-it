@@ -42,15 +42,27 @@ class TrafficService(
         return status
     }
 
+    fun updateRate(update: TrafficRateUpdate): TrafficRate {
+        val updatedRate = workerControl.updateRate(update)
+        logger.atInfo()
+            .addKeyValue(Key.TRAFFIC_ORDERS_PER_SECOND, updatedRate.ordersPerSecond)
+            .addKeyValue(Key.TRAFFIC_CONCURRENCY, updatedRate.concurrency)
+            .log(Message.TRAFFIC_RATE_UPDATED)
+        return updatedRate
+    }
+
     private companion object {
         object Key {
             const val TRAFFIC_RUNNING = "traffic.running"
             const val TRAFFIC_PAUSED = "traffic.paused"
+            const val TRAFFIC_ORDERS_PER_SECOND = "traffic.orders_per_second"
+            const val TRAFFIC_CONCURRENCY = "traffic.concurrency"
         }
 
         object Message {
             const val TRAFFIC_PAUSED = "Traffic generator paused"
             const val TRAFFIC_RESUMED = "Traffic generator resumed"
+            const val TRAFFIC_RATE_UPDATED = "Traffic generator rate updated"
         }
     }
 }

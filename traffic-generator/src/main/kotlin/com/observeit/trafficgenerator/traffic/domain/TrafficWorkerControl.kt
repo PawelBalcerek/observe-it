@@ -7,4 +7,5 @@ interface TrafficWorkerControl {
 
     fun pause()
     fun resume()
+    fun updateRate(update: TrafficRateUpdate): TrafficRate
 }
