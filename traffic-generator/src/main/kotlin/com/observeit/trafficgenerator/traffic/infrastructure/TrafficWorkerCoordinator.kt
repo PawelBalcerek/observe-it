@@ -2,7 +2,10 @@ package com.observeit.trafficgenerator.traffic.infrastructure
 
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenarioRunner
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
+import com.observeit.trafficgenerator.traffic.domain.TrafficRate
+import com.observeit.trafficgenerator.traffic.domain.TrafficRateUpdate
 import com.observeit.trafficgenerator.traffic.domain.TrafficWorkerControl
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.context.SmartLifecycle
 import org.springframework.stereotype.Component
@@ -16,6 +19,7 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.max
 
 /**
  * Coordinates concurrent background traffic generator workers executing checkout scenarios.
@@ -42,19 +46,25 @@ class TrafficWorkerCoordinator(
     private val runner: CheckoutScenarioRunner,
     private val selector: ScenarioSelector,
     private val properties: TrafficProperties,
-    private val iterationDelayMs: Long = DEFAULT_ITERATION_DELAY_MS,
+    private val iterationDelayMs: Long? = null,
 ) : SmartLifecycle,
     TrafficWorkerControl {
 
     private val logger = LoggerFactory.getLogger(TrafficWorkerCoordinator::class.java)
     private val generationSequence = AtomicLong(0L)
     private val state = AtomicReference<CoordinatorState>(CoordinatorState.Stopped)
+    private val rate = AtomicReference(
+        TrafficRate(
+            ordersPerSecond = properties.ordersPerSecond,
+            concurrency = properties.workers.concurrency,
+        ),
+    )
 
     override val concurrency: Int
-        get() = properties.workers.concurrency
+        get() = rate.get().concurrency
 
     override val ordersPerSecond: Double
-        get() = properties.ordersPerSecond
+        get() = rate.get().ordersPerSecond
 
     override fun start() {
         var started = false
@@ -71,7 +81,14 @@ class TrafficWorkerCoordinator(
 
                 is CoordinatorState.Stopped -> {
                     val nextGeneration = generationSequence.incrementAndGet()
-                    val session = WorkerSession(nextGeneration)
+                    val session = WorkerSession(
+                        generation = nextGeneration,
+                        runner = runner,
+                        selector = selector,
+                        fixedDelayMs = iterationDelayMs,
+                        rateSupplier = { rate.get().ordersPerSecond },
+                        logger = logger,
+                    )
                     val starting = CoordinatorState.Starting(nextGeneration, session)
                     if (state.compareAndSet(current, starting)) {
                         launchWorkers(starting)
@@ -95,24 +112,8 @@ class TrafficWorkerCoordinator(
                     stopped = true
                 }
 
-                is CoordinatorState.Starting -> {
-                    val stoppingState = CoordinatorState.Stopping(current.generation, current.session)
-                    if (state.compareAndSet(current, stoppingState)) {
-                        logger.info("Stopping traffic generator workers")
-                        current.session.stop()
-                        state.compareAndSet(stoppingState, CoordinatorState.Stopped)
-                        stopped = true
-                    }
-                }
-
-                is CoordinatorState.Running -> {
-                    val stoppingState = CoordinatorState.Stopping(current.generation, current.session)
-                    if (state.compareAndSet(current, stoppingState)) {
-                        logger.info("Stopping traffic generator workers")
-                        current.session.stop()
-                        state.compareAndSet(stoppingState, CoordinatorState.Stopped)
-                        stopped = true
-                    }
+                is CoordinatorState.Active -> {
+                    stopped = stopActiveSession(current)
                 }
             }
         }
@@ -126,6 +127,51 @@ class TrafficWorkerCoordinator(
         start()
     }
 
+    override fun updateRate(update: TrafficRateUpdate): TrafficRate {
+        var previous: TrafficRate
+        var updated: TrafficRate
+        do {
+            previous = rate.get()
+            updated = previous.copy(
+                ordersPerSecond = update.ordersPerSecond ?: previous.ordersPerSecond,
+                concurrency = update.concurrency ?: previous.concurrency,
+            )
+        } while (!rate.compareAndSet(previous, updated))
+
+        if (previous.concurrency != updated.concurrency) {
+            restartIfRunning()
+        }
+        return updated
+    }
+
+    private fun stopActiveSession(active: CoordinatorState.Active): Boolean {
+        val stoppingState = CoordinatorState.Stopping(active.generation, active.session)
+        return if (state.compareAndSet(active, stoppingState)) {
+            logger.info("Stopping traffic generator workers")
+            active.session.stop()
+            state.compareAndSet(stoppingState, CoordinatorState.Stopped)
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun restartIfRunning() {
+        var shouldRestart = false
+        while (!shouldRestart) {
+            when (val current = state.get()) {
+                is CoordinatorState.Stopped,
+                is CoordinatorState.Stopping,
+                -> return
+
+                is CoordinatorState.Active -> {
+                    shouldRestart = stopActiveSession(current)
+                }
+            }
+        }
+        start()
+    }
+
     override fun isRunning(): Boolean = state.get().isRunning
 
     override fun isAutoStartup(): Boolean = properties.workers.enabled
@@ -134,7 +180,7 @@ class TrafficWorkerCoordinator(
 
     private fun launchWorkers(starting: CoordinatorState.Starting) {
         val session = starting.session
-        val concurrency = properties.workers.concurrency
+        val concurrency = rate.get().concurrency
         logger.info("Starting {} virtual-thread traffic generator workers", concurrency)
 
         for (i in 1..concurrency) {
@@ -144,7 +190,7 @@ class TrafficWorkerCoordinator(
             }
             val thread = Thread.ofVirtual()
                 .name("traffic-worker-$i")
-                .unstarted { runWorkerLoop(session) }
+                .unstarted { session.runLoop() }
             session.threads.add(thread)
             if (session.isRunning.get() && state.get() === starting) {
                 thread.start()
@@ -159,61 +205,6 @@ class TrafficWorkerCoordinator(
         }
     }
 
-    private fun runWorkerLoop(session: WorkerSession) {
-        while (session.isRunning.get() && !Thread.currentThread().isInterrupted) {
-            val shouldContinue = runSingleIteration(session)
-            if (!shouldContinue) {
-                break
-            }
-        }
-    }
-
-    @Suppress("TooGenericExceptionCaught")
-    private fun runSingleIteration(session: WorkerSession): Boolean = try {
-        if (!session.isRunning.get() || Thread.currentThread().isInterrupted) {
-            false
-        } else {
-            val scenario = selector.select()
-            if (!session.isRunning.get() || Thread.currentThread().isInterrupted) {
-                false
-            } else {
-                runner.execute(scenario)
-                delayIteration(session)
-                session.isRunning.get() && !Thread.currentThread().isInterrupted
-            }
-        }
-    } catch (_: InterruptedException) {
-        Thread.currentThread().interrupt()
-        false
-    } catch (e: Exception) {
-        if (!session.isRunning.get() || Thread.currentThread().isInterrupted || isInterruptedCause(e)) {
-            Thread.currentThread().interrupt()
-            false
-        } else {
-            logger.warn("Worker encountered error in loop: {}", e.message)
-            delayIteration(session)
-            session.isRunning.get() && !Thread.currentThread().isInterrupted
-        }
-    }
-
-    private fun delayIteration(session: WorkerSession) {
-        if (!session.isRunning.get() || Thread.currentThread().isInterrupted) {
-            return
-        }
-        if (iterationDelayMs > 0L) {
-            val executor = CompletableFuture.delayedExecutor(iterationDelayMs, MILLISECONDS)
-            val future = CompletableFuture.runAsync({}, executor)
-            try {
-                future.get()
-            } catch (_: InterruptedException) {
-                future.cancel(true)
-                Thread.currentThread().interrupt()
-            } catch (_: ExecutionException) {
-                // Empty async task cannot throw execution exception
-            }
-        }
-    }
-
     private sealed interface CoordinatorState {
         val isRunning: Boolean
 
@@ -221,11 +212,16 @@ class TrafficWorkerCoordinator(
             override val isRunning: Boolean = false
         }
 
-        data class Starting(val generation: Long, val session: WorkerSession) : CoordinatorState {
+        sealed interface Active : CoordinatorState {
+            val generation: Long
+            val session: WorkerSession
+        }
+
+        data class Starting(override val generation: Long, override val session: WorkerSession) : Active {
             override val isRunning: Boolean = true
         }
 
-        data class Running(val generation: Long, val session: WorkerSession) : CoordinatorState {
+        data class Running(override val generation: Long, override val session: WorkerSession) : Active {
             override val isRunning: Boolean = true
         }
 
@@ -234,10 +230,76 @@ class TrafficWorkerCoordinator(
         }
     }
 
-    private class WorkerSession(val generation: Long) {
+    private class WorkerSession(
+        val generation: Long,
+        private val runner: CheckoutScenarioRunner,
+        private val selector: ScenarioSelector,
+        private val fixedDelayMs: Long?,
+        private val rateSupplier: () -> Double,
+        private val logger: Logger,
+    ) {
         val isRunning = AtomicBoolean(true)
         val threads = CopyOnWriteArrayList<Thread>()
         private val terminationLatch = CountDownLatch(1)
+
+        fun runLoop() {
+            while (isRunning.get() && !Thread.currentThread().isInterrupted) {
+                val shouldContinue = runSingleIteration()
+                if (!shouldContinue) {
+                    break
+                }
+            }
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        private fun runSingleIteration(): Boolean = try {
+            if (!isRunning.get() || Thread.currentThread().isInterrupted) {
+                false
+            } else {
+                val scenario = selector.select()
+                if (!isRunning.get() || Thread.currentThread().isInterrupted) {
+                    false
+                } else {
+                    runner.execute(scenario)
+                    delayIteration()
+                    isRunning.get() && !Thread.currentThread().isInterrupted
+                }
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        } catch (e: Exception) {
+            if (!isRunning.get() || Thread.currentThread().isInterrupted || isInterruptedCause(e)) {
+                Thread.currentThread().interrupt()
+                false
+            } else {
+                logger.warn("Worker encountered error in loop: {}", e.message)
+                delayIteration()
+                isRunning.get() && !Thread.currentThread().isInterrupted
+            }
+        }
+
+        private fun delayIteration() {
+            if (!isRunning.get() || Thread.currentThread().isInterrupted) {
+                return
+            }
+            val delayMs = computeDelayMs()
+            if (delayMs > 0L) {
+                val executor = CompletableFuture.delayedExecutor(delayMs, MILLISECONDS)
+                val future = CompletableFuture.runAsync({}, executor)
+                try {
+                    future.get()
+                } catch (_: InterruptedException) {
+                    future.cancel(true)
+                    Thread.currentThread().interrupt()
+                } catch (_: ExecutionException) {
+                    // Empty async task cannot throw execution exception
+                }
+            }
+        }
+
+        private fun computeDelayMs(): Long =
+            fixedDelayMs ?: max(MIN_ITERATION_DELAY_MS, (MILLIS_PER_SECOND / rateSupplier()).toLong())
 
         fun stop() {
             if (isRunning.compareAndSet(true, false)) {
@@ -270,8 +332,9 @@ class TrafficWorkerCoordinator(
     }
 
     private companion object {
-        const val DEFAULT_ITERATION_DELAY_MS = 500L
         const val STOP_JOIN_TIMEOUT_MS = 1000L
+        const val MIN_ITERATION_DELAY_MS = 10L
+        const val MILLIS_PER_SECOND = 1000.0
 
         fun isInterruptedCause(e: Throwable): Boolean {
             var current: Throwable? = e

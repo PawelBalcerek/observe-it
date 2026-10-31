@@ -1,8 +1,10 @@
 package com.observeit.trafficgenerator.traffic.api
 
 import com.observeit.trafficgenerator.traffic.domain.TrafficService
+import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -18,4 +20,8 @@ class TrafficController(private val trafficService: TrafficService) {
 
     @PostMapping("/resume")
     fun resume(): TrafficStatusResponse = TrafficStatusResponse.from(trafficService.resume())
+
+    @PostMapping("/rate")
+    fun updateRate(@Valid @RequestBody request: UpdateTrafficRateRequest): UpdateTrafficRateResponse =
+        UpdateTrafficRateResponse.from(trafficService.updateRate(request.toDomain()))
 }

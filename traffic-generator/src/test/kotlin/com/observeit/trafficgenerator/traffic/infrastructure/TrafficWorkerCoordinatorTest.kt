@@ -1,5 +1,6 @@
 package com.observeit.trafficgenerator.traffic.infrastructure
 
+import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTrafficRate
 import com.observeit.trafficgenerator.traffic.domain.CancelOrderResult
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.HAPPY_PATH
@@ -13,6 +14,7 @@ import com.observeit.trafficgenerator.traffic.domain.PayOrderResult
 import com.observeit.trafficgenerator.traffic.domain.ReserveOrderResult
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
 import com.observeit.trafficgenerator.traffic.domain.ShipOrderResult
+import com.observeit.trafficgenerator.traffic.domain.TrafficRateUpdate
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
@@ -362,6 +364,155 @@ class TrafficWorkerCoordinatorTest {
         await atMost Duration.ofSeconds(2) untilAsserted {
             activeWorkers.get() shouldBe 0
             coordinator!!.isRunning shouldBe false
+        }
+    }
+
+    @Test
+    fun `updateRate updates target ordersPerSecond and concurrency when stopped`() {
+        // given
+        val runner = CheckoutScenarioRunner(
+            client = recordingClient {},
+            stepPacer = NoOpStepPacer,
+        )
+        val properties = TrafficProperties(
+            ordersPerSecond = 1.0,
+            workers = TrafficProperties.WorkersProperties(enabled = false, concurrency = 2),
+        )
+        coordinator = TrafficWorkerCoordinator(
+            runner = runner,
+            selector = ScenarioSelector { HAPPY_PATH },
+            properties = properties,
+            iterationDelayMs = 1L,
+        )
+
+        // when
+        val updated = coordinator!!.updateRate(TrafficRateUpdate(ordersPerSecond = 4.5, concurrency = 6))
+
+        // then
+        updated shouldBe aTrafficRate(ordersPerSecond = 4.5, concurrency = 6)
+
+        // and
+        coordinator!!.ordersPerSecond shouldBe 4.5
+        coordinator!!.concurrency shouldBe 6
+    }
+
+    @Test
+    fun `updateRate updates target concurrency dynamically and restarts active workers when running`() {
+        // given
+        val workerThreads = ConcurrentHashMap.newKeySet<String>()
+        val runner = CheckoutScenarioRunner(
+            client = recordingClient {
+                workerThreads.add(Thread.currentThread().name)
+            },
+            stepPacer = NoOpStepPacer,
+        )
+        val properties = TrafficProperties(
+            ordersPerSecond = 1.0,
+            workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
+        )
+        coordinator = TrafficWorkerCoordinator(
+            runner = runner,
+            selector = ScenarioSelector { HAPPY_PATH },
+            properties = properties,
+            iterationDelayMs = 1L,
+        )
+        coordinator!!.start()
+
+        await atMost Duration.ofSeconds(2) untilAsserted {
+            workerThreads shouldContainExactlyInAnyOrder setOf("traffic-worker-1", "traffic-worker-2")
+        }
+
+        // when
+        val updated = coordinator!!.updateRate(TrafficRateUpdate(ordersPerSecond = 5.0, concurrency = 4))
+
+        // then
+        updated shouldBe aTrafficRate(ordersPerSecond = 5.0, concurrency = 4)
+
+        // and
+        await atMost Duration.ofSeconds(2) untilAsserted {
+            workerThreads shouldContainExactlyInAnyOrder setOf(
+                "traffic-worker-1",
+                "traffic-worker-2",
+                "traffic-worker-3",
+                "traffic-worker-4",
+            )
+            coordinator!!.isRunning shouldBe true
+            coordinator!!.ordersPerSecond shouldBe 5.0
+            coordinator!!.concurrency shouldBe 4
+        }
+    }
+
+    @Test
+    fun `updateRate preserves existing concurrency when only ordersPerSecond is updated`() {
+        // given
+        val runner = CheckoutScenarioRunner(
+            client = recordingClient {},
+            stepPacer = NoOpStepPacer,
+        )
+        val properties = TrafficProperties(
+            ordersPerSecond = 1.0,
+            workers = TrafficProperties.WorkersProperties(enabled = false, concurrency = 3),
+        )
+        coordinator = TrafficWorkerCoordinator(
+            runner = runner,
+            selector = ScenarioSelector { HAPPY_PATH },
+            properties = properties,
+            iterationDelayMs = 1L,
+        )
+
+        // when
+        val updated = coordinator!!.updateRate(TrafficRateUpdate(ordersPerSecond = 8.0))
+
+        // then
+        updated shouldBe aTrafficRate(ordersPerSecond = 8.0, concurrency = 3)
+
+        // and
+        coordinator!!.ordersPerSecond shouldBe 8.0
+        coordinator!!.concurrency shouldBe 3
+    }
+
+    @Test
+    fun `rapid rate updates maintain consistent state and bounds active threads`() {
+        // given
+        val activeWorkers = AtomicInteger(0)
+        val peakWorkers = AtomicInteger(0)
+
+        val runner = CheckoutScenarioRunner(
+            client = recordingClient {
+                val current = activeWorkers.incrementAndGet()
+                peakWorkers.accumulateAndGet(current, ::max)
+                LockSupport.parkNanos(SCENARIO_HOLD_DURATION_MS * 1_000_000)
+                activeWorkers.decrementAndGet()
+            },
+            stepPacer = NoOpStepPacer,
+        )
+
+        coordinator = TrafficWorkerCoordinator(
+            runner = runner,
+            selector = ScenarioSelector { HAPPY_PATH },
+            properties = TrafficProperties(
+                workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
+            ),
+            iterationDelayMs = 1L,
+        )
+
+        coordinator!!.start()
+
+        // when
+        for (i in 1..20) {
+            val targetConcurrency = if (i % 2 == 0) 3 else 1
+            coordinator!!.updateRate(
+                TrafficRateUpdate(ordersPerSecond = i.toDouble(), concurrency = targetConcurrency),
+            )
+            LockSupport.parkNanos(TOGGLE_INTERVAL_NANOS)
+        }
+
+        // then
+        await atMost Duration.ofSeconds(3) untilAsserted {
+            coordinator!!.isRunning shouldBe true
+            coordinator!!.concurrency shouldBe 3
+            coordinator!!.ordersPerSecond shouldBe 20.0
+            peakWorkers.get() shouldBeLessThanOrEqualTo 5
         }
     }
 
