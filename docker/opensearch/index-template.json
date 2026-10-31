@@ -5,7 +5,8 @@
     "settings": {
       "index": {
         "number_of_shards": 1,
-        "number_of_replicas": 0
+        "number_of_replicas": 0,
+        "default_pipeline": "observe-it-logs-pipeline"
       }
     },
     "mappings": {
@@ -23,17 +24,7 @@
       "properties": {
         "@timestamp": { "type": "date_nanos" },
         "observedTimestamp": { "type": "date_nanos" },
-        "severityText": { "type": "keyword" },
-        "severityNumber": { "type": "integer" },
-        "traceId": { "type": "keyword" },
-        "spanId": { "type": "keyword" },
-        "traceFlags": { "type": "integer" },
-        "instrumentationScope": {
-          "properties": {
-            "name": { "type": "keyword" }
-          }
-        },
-        "body": {
+        "message": {
           "type": "text",
           "fields": {
             "keyword": {
@@ -42,14 +33,17 @@
             }
           }
         },
+        "level": { "type": "keyword" },
+        "logger": { "type": "keyword" },
+        "env": { "type": "keyword" },
+        "service": { "type": "keyword" },
+        "version": { "type": "keyword" },
+        "exception": { "type": "text" },
+        "traceId": { "type": "keyword" },
+        "spanId": { "type": "keyword" },
+        "traceFlags": { "type": "integer" },
         "resource": {
           "properties": {
-            "service": {
-              "properties": {
-                "name": { "type": "keyword" },
-                "version": { "type": "keyword" }
-              }
-            },
             "deployment": {
               "properties": {
                 "environment": {
@@ -121,21 +115,6 @@
             "error": {
               "properties": {
                 "type": { "type": "keyword" }
-              }
-            },
-            "exception": {
-              "properties": {
-                "type": { "type": "keyword" },
-                "message": {
-                  "type": "text",
-                  "fields": {
-                    "keyword": {
-                      "type": "keyword",
-                      "ignore_above": 1024
-                    }
-                  }
-                },
-                "stacktrace": { "type": "text" }
               }
             },
             "thread": {

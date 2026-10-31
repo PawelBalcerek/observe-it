@@ -1,0 +1,11 @@
+{
+  "description": "Observe-it log deduplication, field normalization, and alias pipeline",
+  "processors": [
+    {
+      "script": {
+        "description": "Extract clean fields (message, level, logger, env, service, version, exception) and remove duplicates",
+        "source": "if (ctx.body != null) { ctx.message = ctx.remove('body'); } if (ctx.severity != null && ctx.severity.text != null) { ctx.level = ctx.severity.text; ctx.remove('severity'); } if (ctx.instrumentationScope != null) { ctx.logger = ctx.instrumentationScope.name; ctx.remove('instrumentationScope'); } if (ctx.resource != null) { if (ctx.resource['service.name'] != null) { ctx.service = ctx.resource.remove('service.name'); } if (ctx.resource['service.version'] != null) { ctx.version = ctx.resource.remove('service.version'); } if (ctx.resource['deployment.environment.name'] != null) { ctx.env = ctx.resource['deployment.environment.name']; } } if (ctx.attributes != null) { ctx.attributes.remove('data_stream'); if (ctx.attributes['exception.stacktrace'] != null) { ctx.exception = ctx.attributes.remove('exception.stacktrace'); } ctx.attributes.remove('exception.message'); ctx.attributes.remove('exception.type'); }"
+      }
+    }
+  ]
+}

@@ -54,7 +54,7 @@ class RestObservedAppClient(private val restClient: RestClient) : ObservedAppCli
                             ?: throw unexpectedStatus(response)
                         CreateOrderResult(
                             orderId = body.orderId,
-                            customerId = body.customerId,
+                            customerId = customerId,
                             state = body.state,
                         )
                     }
@@ -127,7 +127,7 @@ class RestObservedAppClient(private val restClient: RestClient) : ObservedAppCli
                         ShipOrderResult.Success(
                             orderId = body.orderId,
                             state = body.state,
-                            shippingMethod = body.shippingMethod,
+                            shippingMethod = shippingMethod,
                         )
                     }
                     else -> throw unexpectedStatus(response)
@@ -150,7 +150,7 @@ class RestObservedAppClient(private val restClient: RestClient) : ObservedAppCli
                         CancelOrderResult.Success(
                             orderId = body.orderId,
                             state = body.state,
-                            reason = body.reason,
+                            reason = reason,
                         )
                     }
                     else -> throw unexpectedStatus(response)
@@ -204,7 +204,7 @@ private data class CreateOrderLineItemPayload(
     val currency: String,
 )
 
-private data class CreateOrderResponsePayload(val orderId: String, val customerId: String, val state: String)
+private data class CreateOrderResponsePayload(val orderId: String, val state: String)
 
 private data class ReserveOrderResponsePayload(val orderId: String, val state: String)
 
@@ -214,11 +214,11 @@ private data class PayOrderResponsePayload(val orderId: String, val state: Strin
 
 private data class ShipOrderPayload(val shippingMethod: String)
 
-private data class ShipOrderResponsePayload(val orderId: String, val state: String, val shippingMethod: String)
+private data class ShipOrderResponsePayload(val orderId: String, val state: String)
 
 private data class CancelOrderPayload(val reason: String)
 
-private data class CancelOrderResponsePayload(val orderId: String, val state: String, val reason: String)
+private data class CancelOrderResponsePayload(val orderId: String, val state: String)
 
 private data class GetOrderResponsePayload(
     val orderId: String,

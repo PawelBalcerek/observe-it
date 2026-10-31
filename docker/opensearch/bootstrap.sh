@@ -7,6 +7,13 @@ until curl -fsS http://opensearch:9200/_cluster/health >/dev/null 2>&1; do
 done
 echo "==> OpenSearch is available."
 
+echo "==> Registering log ingest pipeline: observe-it-logs-pipeline..."
+curl -fsS -X PUT "http://opensearch:9200/_ingest/pipeline/observe-it-logs-pipeline" \
+  -H "Content-Type: application/json" \
+  -d "@/bootstrap/ingest-pipeline.json"
+echo ""
+echo "==> Log ingest pipeline registered."
+
 echo "==> Registering SS4O log index template: observe-it-ss4o-logs..."
 curl -fsS -X PUT "http://opensearch:9200/_index_template/observe-it-ss4o-logs" \
   -H "Content-Type: application/json" \

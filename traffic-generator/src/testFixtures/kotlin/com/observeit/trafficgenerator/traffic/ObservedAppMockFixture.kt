@@ -21,7 +21,6 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
     fun expectCreateOrder(
         scenario: CheckoutScenario,
-        expectedCustomerId: String = Default.CUSTOMER_ID,
         returnOrderId: String = Default.ORDER_ID,
         returnState: String = State.CREATED,
     ) {
@@ -35,19 +34,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                         """
                         {
                             "orderId": "$returnOrderId",
-                            "customerId": "$expectedCustomerId",
-                            "state": "$returnState",
-                            "items": [
-                                {
-                                    "sku": "${Default.SKU}",
-                                    "quantity": 1,
-                                    "unitPrice": 10.00,
-                                    "currency": "${Default.CURRENCY}"
-                                }
-                            ],
-                            "totalAmount": 10.00,
-                            "currency": "${Default.CURRENCY}",
-                            "createdAt": "${Default.CREATED_AT}"
+                            "state": "$returnState"
                         }
                         """.trimIndent(),
                     ),
@@ -219,8 +206,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                     """
                     {
                         "orderId": "$orderId",
-                        "state": "$returnState",
-                        "shippingMethod": "$shippingMethod"
+                        "state": "$returnState"
                     }
                     """.trimIndent(),
                     APPLICATION_JSON,
@@ -243,8 +229,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
                     """
                     {
                         "orderId": "$orderId",
-                        "state": "$returnState",
-                        "reason": "$reason"
+                        "state": "$returnState"
                     }
                     """.trimIndent(),
                     APPLICATION_JSON,

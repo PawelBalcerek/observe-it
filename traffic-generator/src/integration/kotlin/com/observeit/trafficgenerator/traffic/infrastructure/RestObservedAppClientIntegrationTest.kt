@@ -43,9 +43,7 @@ class RestObservedAppClientIntegrationTest {
         // given
         mockFixture.expectCreateOrder(
             scenario = HAPPY_PATH,
-            expectedCustomerId = Default.CUSTOMER_ID,
             returnOrderId = Default.ORDER_ID,
-            returnState = State.CREATED,
         )
 
         // when
