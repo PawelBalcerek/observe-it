@@ -1,5 +1,6 @@
 package com.observeit.trafficgenerator.traffic.domain
 
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
 @Service
@@ -7,6 +8,8 @@ class TrafficService(
     private val workerControl: TrafficWorkerControl,
     private val scenarioExecutionCounters: ScenarioExecutionCounters,
 ) {
+
+    private val logger = LoggerFactory.getLogger(TrafficService::class.java)
 
     fun getStatus(): TrafficStatus {
         val running = workerControl.isRunning()
@@ -17,5 +20,37 @@ class TrafficService(
             concurrency = workerControl.concurrency,
             scenarioExecutionCounts = scenarioExecutionCounters.getCounts(),
         )
+    }
+
+    fun pause(): TrafficStatus {
+        workerControl.pause()
+        val status = getStatus()
+        logger.atInfo()
+            .addKeyValue(Key.TRAFFIC_RUNNING, status.running)
+            .addKeyValue(Key.TRAFFIC_PAUSED, status.paused)
+            .log(Message.TRAFFIC_PAUSED)
+        return status
+    }
+
+    fun resume(): TrafficStatus {
+        workerControl.resume()
+        val status = getStatus()
+        logger.atInfo()
+            .addKeyValue(Key.TRAFFIC_RUNNING, status.running)
+            .addKeyValue(Key.TRAFFIC_PAUSED, status.paused)
+            .log(Message.TRAFFIC_RESUMED)
+        return status
+    }
+
+    private companion object {
+        object Key {
+            const val TRAFFIC_RUNNING = "traffic.running"
+            const val TRAFFIC_PAUSED = "traffic.paused"
+        }
+
+        object Message {
+            const val TRAFFIC_PAUSED = "Traffic generator paused"
+            const val TRAFFIC_RESUMED = "Traffic generator resumed"
+        }
     }
 }

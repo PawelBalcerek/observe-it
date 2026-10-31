@@ -4,4 +4,7 @@ interface TrafficWorkerControl {
     fun isRunning(): Boolean
     val concurrency: Int
     val ordersPerSecond: Double
+
+    fun pause()
+    fun resume()
 }

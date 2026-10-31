@@ -11,6 +11,18 @@ class TrafficApiFixture(private val restTestClient: RestTestClient) {
         .expectStatus().isOk
         .expectNonNullBody(TrafficStatusResponse::class.java)
 
+    fun pauseAndExpect200(): TrafficStatusResponse = restTestClient.post()
+        .uri(Endpoint.TRAFFIC_PAUSE_PATH)
+        .exchange()
+        .expectStatus().isOk
+        .expectNonNullBody(TrafficStatusResponse::class.java)
+
+    fun resumeAndExpect200(): TrafficStatusResponse = restTestClient.post()
+        .uri(Endpoint.TRAFFIC_RESUME_PATH)
+        .exchange()
+        .expectStatus().isOk
+        .expectNonNullBody(TrafficStatusResponse::class.java)
+
     private fun <T : Any> ResponseSpec.expectNonNullBody(bodyType: Class<T>): T =
         checkNotNull(expectBody(bodyType).returnResult().responseBody) {
             "Expected non-null ${bodyType.simpleName} response body"
@@ -19,6 +31,8 @@ class TrafficApiFixture(private val restTestClient: RestTestClient) {
     private companion object {
         object Endpoint {
             const val TRAFFIC_STATUS_PATH = "/api/traffic/status"
+            const val TRAFFIC_PAUSE_PATH = "/api/traffic/pause"
+            const val TRAFFIC_RESUME_PATH = "/api/traffic/resume"
         }
     }
 }
