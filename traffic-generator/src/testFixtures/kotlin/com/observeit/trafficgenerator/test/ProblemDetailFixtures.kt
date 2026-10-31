@@ -22,3 +22,13 @@ fun ProblemDetail.shouldBeValidationError(vararg expectedErrors: String) {
         }
     }
 }
+
+fun ProblemDetail.shouldBeBadRequestError(expectedDetail: String? = null) {
+    assertSoftly(this) {
+        status shouldBe BAD_REQUEST.value()
+        title shouldBe BAD_REQUEST.reasonPhrase
+        if (expectedDetail != null) {
+            detail shouldBe expectedDetail
+        }
+    }
+}

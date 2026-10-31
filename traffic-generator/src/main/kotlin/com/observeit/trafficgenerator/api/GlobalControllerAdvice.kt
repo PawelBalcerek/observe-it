@@ -7,6 +7,7 @@ import org.springframework.http.ProblemDetail
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 
 @RestControllerAdvice
 class GlobalControllerAdvice {
@@ -20,6 +21,13 @@ class GlobalControllerAdvice {
         val problem = problemDetail(BAD_REQUEST, VALIDATION_ERROR_DETAIL)
         problem.setProperty(ERRORS_KEY, errors)
         return problem
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun handleMethodArgumentTypeMismatchException(exception: MethodArgumentTypeMismatchException): ProblemDetail {
+        val detail = "Failed to convert parameter '${exception.name}' with value '${exception.value}'"
+        logClientWarning(detail)
+        return problemDetail(BAD_REQUEST, detail)
     }
 
     private fun logClientWarning(message: String) {

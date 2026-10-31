@@ -1,9 +1,11 @@
 package com.observeit.trafficgenerator.traffic
 
 import com.observeit.trafficgenerator.traffic.api.TrafficStatusResponse
+import com.observeit.trafficgenerator.traffic.api.TriggerScenarioResponse
 import com.observeit.trafficgenerator.traffic.api.UpdateTrafficRateRequest
 import com.observeit.trafficgenerator.traffic.api.UpdateTrafficRateResponse
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
+import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.HAPPY_PATH
 import com.observeit.trafficgenerator.traffic.domain.TrafficRate
 
 object TrafficFixtures {
@@ -35,6 +37,20 @@ object TrafficFixtures {
     fun anUpdateTrafficRateResponse(ordersPerSecond: Double = 2.0, concurrency: Int = 5) = UpdateTrafficRateResponse(
         ordersPerSecond = ordersPerSecond,
         concurrency = concurrency,
+    )
+
+    fun aTriggerScenarioResponse(
+        scenario: CheckoutScenario = HAPPY_PATH,
+        orderId: String = "orderId",
+        customerId: String = "customerId",
+        finalState: String = "SHIPPED",
+        success: Boolean = true,
+    ) = TriggerScenarioResponse(
+        scenario = scenario,
+        orderId = orderId,
+        customerId = customerId,
+        finalState = finalState,
+        success = success,
     )
 
     private fun defaultScenarioExecutionCounts(): Map<CheckoutScenario, Long> =
