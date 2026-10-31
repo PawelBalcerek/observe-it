@@ -24,5 +24,8 @@ management:
         include: health
 
 logging:
+  level:
+    com.observeit: DEBUG
+    org.hibernate.validator: ERROR
   pattern:
     console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%X{trace_id:-},%X{span_id:-}] [%X{order.id:-}] [%15.15t] %-40.40logger{39} : %m%n"

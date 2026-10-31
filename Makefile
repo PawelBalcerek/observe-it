@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := up
-.PHONY: build up down reset logs
+.PHONY: build up down reset logs verify
 
 build:
 	./gradlew bootBuildImage
@@ -15,3 +15,6 @@ reset:
 
 logs:
 	docker compose logs -f
+
+verify:
+	./scripts/verify-m1.sh
