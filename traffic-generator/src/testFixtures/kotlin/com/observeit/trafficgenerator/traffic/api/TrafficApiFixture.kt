@@ -1,5 +1,6 @@
 package com.observeit.trafficgenerator.traffic.api
 
+import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
 import org.springframework.http.ProblemDetail
 import org.springframework.test.web.servlet.client.RestTestClient
 import org.springframework.test.web.servlet.client.RestTestClient.ResponseSpec
@@ -38,6 +39,18 @@ class TrafficApiFixture(private val restTestClient: RestTestClient) {
         .expectStatus().isBadRequest
         .expectNonNullBody(ProblemDetail::class.java)
 
+    fun triggerScenarioAndExpect200(scenario: CheckoutScenario): TriggerScenarioResponse = restTestClient.post()
+        .uri(Endpoint.TRAFFIC_TRIGGER_PATH, scenario.name)
+        .exchange()
+        .expectStatus().isOk
+        .expectNonNullBody(TriggerScenarioResponse::class.java)
+
+    fun triggerScenarioAndExpect400(scenario: String): ProblemDetail = restTestClient.post()
+        .uri(Endpoint.TRAFFIC_TRIGGER_PATH, scenario)
+        .exchange()
+        .expectStatus().isBadRequest
+        .expectNonNullBody(ProblemDetail::class.java)
+
     private fun <T : Any> ResponseSpec.expectNonNullBody(bodyType: Class<T>): T =
         checkNotNull(expectBody(bodyType).returnResult().responseBody) {
             "Expected non-null ${bodyType.simpleName} response body"
@@ -49,6 +62,7 @@ class TrafficApiFixture(private val restTestClient: RestTestClient) {
             const val TRAFFIC_PAUSE_PATH = "/api/traffic/pause"
             const val TRAFFIC_RESUME_PATH = "/api/traffic/resume"
             const val TRAFFIC_RATE_PATH = "/api/traffic/rate"
+            const val TRAFFIC_TRIGGER_PATH = "/api/traffic/trigger/{scenario}"
         }
     }
 }

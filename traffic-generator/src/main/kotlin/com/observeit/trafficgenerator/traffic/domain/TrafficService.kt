@@ -7,9 +7,12 @@ import org.springframework.stereotype.Service
 class TrafficService(
     private val workerControl: TrafficWorkerControl,
     private val scenarioExecutionCounters: ScenarioExecutionCounters,
+    private val scenarioRunner: CheckoutScenarioRunner,
 ) {
 
     private val logger = LoggerFactory.getLogger(TrafficService::class.java)
+
+    fun trigger(scenario: CheckoutScenario): ScenarioExecutionResult = scenarioRunner.execute(scenario)
 
     fun getStatus(): TrafficStatus {
         val running = workerControl.isRunning()
