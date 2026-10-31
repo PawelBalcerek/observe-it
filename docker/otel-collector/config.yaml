@@ -1,0 +1,38 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+  batch:
+    send_batch_size: 100
+    timeout: 1s
+
+exporters:
+  opensearch:
+    http:
+      endpoint: "http://opensearch:9200"
+      tls:
+        insecure: true
+    mapping:
+      mode: ss4o
+    dataset: observe-it
+    namespace: local
+    sending_queue:
+      enabled: true
+    retry_on_failure:
+      enabled: true
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [opensearch]

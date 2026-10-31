@@ -1,0 +1,150 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.9.0
+    container_name: opensearch
+    environment:
+      - cluster.name=observe-it-cluster
+      - node.name=opensearch-node1
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health | grep -q '\"status\":\"\\(green\\|yellow\\)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - observe-it-net
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.9.0
+    container_name: opensearch-dashboards
+    environment:
+      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - observe-it-net
+
+  opensearch-bootstrap:
+    image: opensearchproject/opensearch:3.9.0
+    container_name: opensearch-bootstrap
+    restart: "no"
+    entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
+    volumes:
+      - ./docker/opensearch:/bootstrap:ro
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      opensearch-dashboards:
+        condition: service_started
+    networks:
+      - observe-it-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    mem_limit: 256m
+    depends_on:
+      opensearch-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - observe-it-net
+
+  observed-app:
+    image: observe-it/observed-app:0.1.0
+    container_name: observed-app
+    pull_policy: never
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - BPL_JVM_THREAD_COUNT=50
+      - OTEL_JAVAAGENT_ENABLED=true
+      - OTEL_SERVICE_NAME=observed-app
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=0.1.0,deployment.environment.name=local
+      - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES=*
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_KEY_VALUE_PAIR_ATTRIBUTES=true
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_CODE_ATTRIBUTES=true
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/cnb/lifecycle/launcher", "--", "java", "-Dotel.javaagent.enabled=false", "-cp", "/workspace/BOOT-INF/classes:/workspace/BOOT-INF/lib/*", "com.observeit.observedapp.HealthCheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - observe-it-net
+
+  traffic-generator:
+    image: observe-it/traffic-generator:0.1.0
+    container_name: traffic-generator
+    pull_policy: never
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      - TRAFFIC_OBSERVED_APP_URL=http://observed-app:8080
+      - BPL_JVM_THREAD_COUNT=50
+      - OTEL_JAVAAGENT_ENABLED=true
+      - OTEL_SERVICE_NAME=traffic-generator
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=0.1.0,deployment.environment.name=local
+      - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES=*
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_KEY_VALUE_PAIR_ATTRIBUTES=true
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_CODE_ATTRIBUTES=true
+    depends_on:
+      otel-collector:
+        condition: service_started
+      observed-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/cnb/lifecycle/launcher", "--", "java", "-Dotel.javaagent.enabled=false", "-cp", "/workspace/BOOT-INF/classes:/workspace/BOOT-INF/lib/*", "com.observeit.trafficgenerator.HealthCheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - observe-it-net
+
+networks:
+  observe-it-net:
+    driver: bridge
+
+volumes:
+  opensearch-data:
+    driver: local

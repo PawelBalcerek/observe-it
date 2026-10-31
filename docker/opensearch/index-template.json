@@ -1,0 +1,160 @@
+{
+  "index_patterns": ["ss4o_logs-*"],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0
+      }
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings_as_keywords": {
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date_nanos" },
+        "observedTimestamp": { "type": "date_nanos" },
+        "severityText": { "type": "keyword" },
+        "severityNumber": { "type": "integer" },
+        "traceId": { "type": "keyword" },
+        "spanId": { "type": "keyword" },
+        "traceFlags": { "type": "integer" },
+        "instrumentationScope": {
+          "properties": {
+            "name": { "type": "keyword" }
+          }
+        },
+        "body": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        "resource": {
+          "properties": {
+            "service": {
+              "properties": {
+                "name": { "type": "keyword" },
+                "version": { "type": "keyword" }
+              }
+            },
+            "deployment": {
+              "properties": {
+                "environment": {
+                  "properties": {
+                    "name": { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "telemetry": {
+              "properties": {
+                "sdk": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "language": { "type": "keyword" },
+                    "version": { "type": "keyword" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "attributes": {
+          "properties": {
+            "order": {
+              "properties": {
+                "id": { "type": "keyword" },
+                "state": { "type": "keyword" },
+                "previous_state": { "type": "keyword" },
+                "currency": { "type": "keyword" },
+                "attempted_action": { "type": "keyword" },
+                "total_amount": { "type": "double" },
+                "item_count": { "type": "long" }
+              }
+            },
+            "customer": {
+              "properties": {
+                "id": { "type": "keyword" }
+              }
+            },
+            "checkout": {
+              "properties": {
+                "scenario": { "type": "keyword" }
+              }
+            },
+            "inventory": {
+              "properties": {
+                "sku": { "type": "keyword" },
+                "requested_quantity": { "type": "long" },
+                "available_quantity": { "type": "long" }
+              }
+            },
+            "payment": {
+              "properties": {
+                "method": { "type": "keyword" },
+                "latency_ms": { "type": "long" }
+              }
+            },
+            "shipping": {
+              "properties": {
+                "method": { "type": "keyword" }
+              }
+            },
+            "cancellation": {
+              "properties": {
+                "reason": { "type": "keyword" }
+              }
+            },
+            "error": {
+              "properties": {
+                "type": { "type": "keyword" }
+              }
+            },
+            "exception": {
+              "properties": {
+                "type": { "type": "keyword" },
+                "message": {
+                  "type": "text",
+                  "fields": {
+                    "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 1024
+                    }
+                  }
+                },
+                "stacktrace": { "type": "text" }
+              }
+            },
+            "thread": {
+              "properties": {
+                "name": { "type": "keyword" },
+                "id": { "type": "long" }
+              }
+            },
+            "code": {
+              "properties": {
+                "namespace": { "type": "keyword" },
+                "function": { "type": "keyword" },
+                "filepath": { "type": "keyword" },
+                "lineno": { "type": "long" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
