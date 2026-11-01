@@ -6,3 +6,6 @@ build/
 *.iml
 .DS_Store
 wip
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/

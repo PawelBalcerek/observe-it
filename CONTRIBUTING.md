@@ -45,14 +45,16 @@ Every ticket is delivered as a single, self-contained pull request following the
 
 Each stage ends when its completion criterion holds.
 
-1. **Implement & publish** _(`/implement #<n>`)_: fetch the issue, create the ticket branch, build test-first (TDD), run
-   `./gradlew check`, run the `code-review` skill and fix its findings, commit, push the branch, and open the PR (see
-   _Ticket-driven delivery_ and the `pr` skill). Done when `./gradlew check` is green and the PR is open and links the
-   issue.
+1. **Implement & publish** _(`/implement #<n>`)_: fetch the issue, create the ticket branch, build test-first (TDD),
+   run the change-scoped verification gate (`make docs-build` for documentation or Markdown changes; `./gradlew check`
+   for JVM code or build/CI dependencies; or both when changes span both), run the `code-review` skill and fix its
+   findings, commit, push the branch, and open the PR (see _Ticket-driven delivery_ and the `pr` skill). Done when the
+   verification gates pass and the PR is open and links the issue.
 2. **Human review** _(human)_: the human leaves review comments on the PR.
-3. **Respond to PR comments** _(`/respond-to-pr-comments`)_: run the `respond-to-pr-comments` skill to align on a fix plan in chat,
-   amend and push the agreed fixes, and reply to and resolve each agreed review thread. Done when the remote PR is
-   updated and every agreed thread is replied to and resolved.
+3. **Respond to PR comments** _(`/respond-to-pr-comments`)_: run the `respond-to-pr-comments` skill to align on a fix
+   plan in chat, amend and push the agreed fixes, verify via `make docs-build` and/or `./gradlew check`, and reply to
+   and resolve each agreed review thread. Done when the remote PR is updated and every agreed thread is replied to and
+   resolved.
 4. Repeat from step 2 until the human merges.
 
 ## Retrospectives

@@ -10,3 +10,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # vitepress-plugin-mermaid peer dependency requires mermaid "10 || 11"
+      - dependency-name: "mermaid"
+        versions: [">= 12.0.0"]

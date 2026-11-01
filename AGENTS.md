@@ -1,3 +1,5 @@
+# Agent Guidelines
+
 ## Agent skills
 
 ### Issue tracker
@@ -17,8 +19,8 @@ Single-context layout (`CONTEXT.md` and `docs/adr/` at the repo root). See `docs
 
 Feature packages split into `api`, `domain`, and `infrastructure` subpackages (`api` → `domain` ← `infrastructure`),
 transport-agnostic cross-cutting context, lock-free `java.util.concurrent` state over `synchronized`, DTO naming,
-shared exception handling, and static imports. Read before writing or modifying any production code. See
-`docs/agents/architecture.md`.
+shared exception handling, static imports, and live registry lookups for latest dependency/tooling versions. Read before
+writing or modifying any production code or build/CI dependency. See `docs/agents/architecture.md`.
 
 ### Testing conventions
 
@@ -29,7 +31,17 @@ Awaitility. Read before writing or modifying any test or test fixture. See `docs
 
 ### Code formatting & static analysis (ktlint & detekt)
 
-Ktlint (`org.jlleitschuh.gradle.ktlint`) and Detekt (`dev.detekt`, configured in `config/detekt/detekt.yml`) are wired into `./gradlew check`. Before committing any changes, run `./gradlew check` and format with `./gradlew ktlintFormat` if needed. Reviews check diffs against `CODING_STANDARDS.md`.
+Ktlint (`org.jlleitschuh.gradle.ktlint`) and Detekt (`dev.detekt`, configured in `config/detekt/detekt.yml`) are wired
+into `./gradlew check`. Before committing any changes, run `./gradlew check` and format with `./gradlew ktlintFormat` if
+needed. Reviews check diffs against `CODING_STANDARDS.md`.
+
+### Documentation & Markdown
+
+Role-based `docs/` layout (`docs/index.md`, living `docs/guides/*` following General Pattern → External Sources → In
+Observe-It, append-only atomic `docs/adr/NNNN-*.md`), zero YAML frontmatter, 120-character Markdown line wrapping, code
+block / Mermaid / cross-linking rules, and `CONTEXT.md` glossary adherence. Before committing changes to any `.md` file
+or docs configuration, run `make docs-build` (`markdownlint-cli2` and `vitepress build`). Read before writing or
+modifying any documentation or Markdown file. See `docs/agents/documentation.md`.
 
 ### Git & PR workflow
 
