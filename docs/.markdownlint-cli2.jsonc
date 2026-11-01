@@ -1,0 +1,31 @@
+{
+  "globs": [
+    "../*.md",
+    "**/*.md"
+  ],
+  "ignores": [
+    "node_modules/**",
+    ".vitepress/**",
+    "../.agents/**"
+  ],
+  "config": {
+    "default": true,
+    "MD001": true,
+    "MD013": {
+      "line_length": 120,
+      "code_blocks": false,
+      "tables": false,
+      "headings": false,
+      "strict": false
+    },
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD025": true,
+    "MD031": true,
+    "MD040": true,
+    "MD060": {
+      "style": "aligned"
+    }
+  }
+}
