@@ -31,12 +31,39 @@ export default withMermaid(
       },
       nav: [
         { text: 'Overview', link: '/' },
+        { text: 'ADRs', link: '/adr/' },
       ],
       sidebar: [
         {
           text: 'Overview',
           items: [
             { text: 'Overview & Quick Start', link: '/' },
+          ],
+        },
+        {
+          text: 'Architecture Decisions',
+          items: [
+            { text: 'ADR Index', link: '/adr/' },
+            {
+              text: '0001: Zero-Code OTel Java Agent & Logback Bridge',
+              link: '/adr/0001-zero-code-otel-javaagent-and-logback-bridge',
+            },
+            {
+              text: '0002: OTel Collector ss4o & OpenSearch Ingest Pipeline',
+              link: '/adr/0002-otel-collector-ss4o-and-opensearch-ingest-pipeline',
+            },
+            {
+              text: '0003: SLF4J 2 Fluent Key-Values & Scoped MDC Correlation',
+              link: '/adr/0003-slf4j-fluent-key-values-and-scoped-mdc-correlation',
+            },
+            {
+              text: '0004: Out-of-Process Traffic Generator Service',
+              link: '/adr/0004-out-of-process-traffic-generator',
+            },
+            {
+              text: '0005: Bounded Lock-Free In-Memory Order Repository',
+              link: '/adr/0005-bounded-in-memory-order-repository',
+            },
           ],
         },
       ],
