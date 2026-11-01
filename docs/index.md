@@ -45,6 +45,13 @@ To stop the stack and remove volumes:
 make reset
 ```
 
+## Guided Reading Path
+
+### Architecture Decision Records
+
+Architecture Decision Records (ADRs) capture point-in-time, append-only architectural choices and their rationale,
+trade-offs, and consequences. See the [ADR Index](./adr/index.md) for more.
+
 ## Observability Pillars & Roadmap
 
 | Milestone       | Pillar               | Status  | Scope & Capabilities                                                                                                                                                                                                                                                                                                |
