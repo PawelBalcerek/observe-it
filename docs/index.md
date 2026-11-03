@@ -47,6 +47,13 @@ make reset
 
 ## Guided Reading Path
 
+### Narrative Guides
+
+Explore living narrative and operational guides in the [Guides Overview](./guides/index.md):
+
+- [Observability Stack & Telemetry Pipeline](./guides/observability-stack.md) — Container topology, Paketo
+  OpenTelemetry Java Agent buildpack, OpenTelemetry Collector pipeline, and OpenSearch bootstrap.
+
 ### Architecture Decision Records
 
 Architecture Decision Records (ADRs) capture point-in-time, append-only architectural choices and their rationale,
