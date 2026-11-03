@@ -16,6 +16,9 @@ export default withMermaid(
           excludeIndexPage: false,
         }),
       ],
+      optimizeDeps: {
+        include: ['mermaid', 'fastdom'],
+      },
     },
     markdown: {
       config(md) {
@@ -31,6 +34,7 @@ export default withMermaid(
       },
       nav: [
         { text: 'Overview', link: '/' },
+        { text: 'Guides', link: '/guides/' },
         { text: 'ADRs', link: '/adr/' },
       ],
       sidebar: [
@@ -41,9 +45,19 @@ export default withMermaid(
           ],
         },
         {
+          text: 'Guides',
+          items: [
+            { text: 'Overview', link: '/guides/' },
+            {
+              text: 'Observability Stack & Telemetry Pipeline',
+              link: '/guides/observability-stack',
+            },
+          ],
+        },
+        {
           text: 'Architecture Decisions',
           items: [
-            { text: 'ADR Index', link: '/adr/' },
+            { text: 'Overview', link: '/adr/' },
             {
               text: '0001: Zero-Code OTel Java Agent & Logback Bridge',
               link: '/adr/0001-zero-code-otel-javaagent-and-logback-bridge',
