@@ -52,6 +52,10 @@ export default withMermaid(
               text: 'Observability Stack & Telemetry Pipeline',
               link: '/guides/observability-stack',
             },
+            {
+              text: 'Structured Logging in Kotlin & Spring Boot',
+              link: '/guides/structured-logging',
+            },
           ],
         },
         {
