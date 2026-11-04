@@ -53,6 +53,8 @@ Explore living narrative and operational guides in the [Guides Overview](./guide
 
 - [Observability Stack & Telemetry Pipeline](./guides/observability-stack.md) — Container topology, Paketo
   OpenTelemetry Java Agent buildpack, OpenTelemetry Collector pipeline, and OpenSearch bootstrap.
+- [Structured Logging in Kotlin & Spring Boot](./guides/structured-logging.md) — SLF4J 2 fluent key-value logging,
+  scoped MDC correlation, Logback OTLP bridge, SS4O document normalization, and in-memory unit testing.
 
 ### Architecture Decision Records
 

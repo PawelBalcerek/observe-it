@@ -20,8 +20,8 @@ Every guide follows a structured 3-step progression:
 
 ## Guides Inventory
 
-| Guide                                                                | Pillar             | Status  | Summary                                                                                                                                              |
-| :------------------------------------------------------------------- | :----------------- | :------ | :--------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Observability Stack & Telemetry Pipeline](./observability-stack.md) | Telemetry Pipeline | Current | Container topology, Paketo OpenTelemetry Java Agent buildpack, OpenTelemetry Collector pipeline, and deterministic OpenSearch bootstrap.             |
-| Structured Logging in Kotlin & Spring Boot                           | Structured Logging | Planned | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation, Logback OTLP bridge, SS4O document anatomy, and in-memory verification with LogCapture. |
-| Checkout Scenarios & Dashboards Walkthrough                          | System & Workload  | Planned | Seven Checkout Scenario paths across Order States, interactive Traffic Generator REST API, and OpenSearch Dashboards / DQL investigation.            |
+| Guide                                                                 | Pillar             | Status  | Summary                                                                                                                                                |
+| :-------------------------------------------------------------------- | :----------------- | :------ | :----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Observability Stack & Telemetry Pipeline](./observability-stack.md)  | Telemetry Pipeline | Current | Container topology, Paketo OpenTelemetry Java Agent buildpack, OpenTelemetry Collector pipeline, and deterministic OpenSearch bootstrap.               |
+| [Structured Logging in Kotlin & Spring Boot](./structured-logging.md) | Structured Logging | Current | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation, Logback OTLP bridge, SS4O document anatomy, and in-memory verification with LogCapture.   |
+| Checkout Scenarios & Dashboards Walkthrough                           | System & Workload  | Planned | Seven Checkout Scenario paths across Order States, interactive Traffic Generator REST API, and OpenSearch Dashboards / DQL investigation.              |
