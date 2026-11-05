@@ -61,5 +61,7 @@ Each stage ends when its completion criterion holds.
 
 A retro is a ticket like any other: open a `retro: ...` issue, work on a `retro/<slug>` branch, and deliver one
 `retro: ...` commit through the same lifecycle. Besides adding or sharpening rules in `docs/agents/*`,
-`CONTRIBUTING.md` or `AGENTS.md`, a retro audits the whole codebase against every rule it touches and fixes each
-violation in the same commit; the PR description lists every finding and its fix.
+`CONTRIBUTING.md`, `CODING_STANDARDS.md`, `AGENTS.md`, or repository-owned skills
+(`.agents/skills/respond-to-pr-comments/`—never modify external Matt Pocock skills under `.agents/skills/`), a retro
+audits the whole codebase against every rule it touches and fixes each violation in the same commit; the PR description
+lists every finding and its fix.

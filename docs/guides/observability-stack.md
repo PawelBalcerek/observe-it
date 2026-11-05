@@ -1,5 +1,7 @@
 # Observability Stack & Telemetry Pipeline
 
+## Decoupled Telemetry Architecture
+
 Decoupling application services from telemetry storage backends is a foundational pattern in modern cloud-native
 systems. Rather than transmitting log records directly from application runtimes to a storage backend, applications
 emit telemetry to an out-of-process OpenTelemetry Collector pipeline:
@@ -23,7 +25,7 @@ layer. Applications stream standard OpenTelemetry Protocol (OTLP) payloads over 
 collector absorbs traffic surges, enforces memory safety boundaries, aggregates individual events into efficient
 network batches, manages retry queues with exponential backoff, and routes normalized records to destination stores.
 
-**External Sources & Ecosystem Practice:**
+### External Sources & Ecosystem Practice
 
 - [OpenTelemetry Collector Deployment Patterns](https://opentelemetry.io/docs/collector/deployment/) — Architectural
   trade-offs between local agent sidecars, centralized gateway collectors, and hybrid topologies.
@@ -31,7 +33,7 @@ network batches, manages retry queues with exponential backoff, and routes norma
   — Production reference architecture demonstrating OTLP emission across heterogeneous microservices into a unified
   collector and storage pipeline.
 
-**In Observe-It:**
+### In Observe-It
 
 Observe-It implements this decoupled pipeline locally using five continuous runtime containers and one transient
 bootstrap container declared in
@@ -298,14 +300,14 @@ The OpenTelemetry log data model encapsulates attributes in deeply nested JSON s
 dashboards requires cumbersome DQL syntax and clutters data exploration views.
 
 While the Simple Schema for Observability (SS4O) establishes standardized naming conventions for log, metric, and trace
-documents in OpenSearch, OpenSearch does not automatically promote or deduplicate incoming OTLP fields by default. To
-achieve clean documents, teams combine SS4O with an OpenSearch Ingest Pipeline (`_ingest/pipeline`) and an Index
-Template (`_index_template` with `default_pipeline`) to normalize documents at ingestion time:
+documents in OpenSearch, OpenSearch does not automatically flatten or deduplicate incoming OTLP fields by default. To
+produce clean documents for exploration, search backends pair target schema conventions with an Ingest Pipeline
+(`_ingest/pipeline`) and an Index Template (`_index_template` with `default_pipeline`) at ingestion time:
 
-- Promotes frequently queried nested fields (`body`, `severity.text`, `service.name`, `instrumentationScope.name`,
-  stack traces) to top-level attributes (`message`, `level`, `service`, `logger`, `exception`).
-- Eliminates redundant nested copies of promoted fields, saving storage space and reducing document parsing overhead.
-- Enforces strict index mappings (`keyword` for identifiers, `double` / `long` for numeric metrics) to prevent
+- Extracts frequently queried nested payload fields into concise top-level document attributes so queries and table
+  columns do not require deep path prefixes.
+- Removes redundant nested copies of extracted fields, saving storage space and reducing document parsing overhead.
+- Enforces explicit index mappings (`keyword` for identifiers, `double` / `long` for numeric metrics) to prevent
   dynamic mapping explosion and guarantee query performance.
 - Automates environment bootstrap so index templates, ingest pipelines, and pre-configured dashboards are provisioned
   before user interaction.
@@ -329,7 +331,10 @@ Observe-It coordinates storage provisioning through four configuration files in
    the ingest pipeline and index template, waits for `opensearch-dashboards` HTTP availability, imports pre-built saved
    objects, and sets `ss4o_logs` as the default index pattern.
 2. **Ingest pipeline** ([`docker/opensearch/ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/ingest-pipeline.json)):
-   A Painless script processor registered as `observe-it-logs-pipeline` that extracts clean top-level fields:
+   A Painless script processor registered as `observe-it-logs-pipeline` that promotes top-level fields (`body` →
+   `message`, `severity.text` → `level`, `instrumentationScope.name` → `logger`, `resource['service.name']` → `service`,
+   `resource['service.version']` → `version`, `resource['deployment.environment.name']` → `env`,
+   `attributes['exception.stacktrace']` → `exception`) and removes duplicate nested attributes:
 
    ```json
    {
@@ -362,8 +367,10 @@ lifecycle targets. Developers need predictable commands to build container image
 dependency order, follow aggregated logs across services, gracefully stop background processes, and reset persistent
 storage to a pristine state when testing clean bootstrap behavior.
 
-In Observe-It, the [`Makefile`](https://github.com/PawelBalcerek/observe-it/blob/main/Makefile) encapsulates these
-lifecycle operations:
+### In Observe-It
+
+The [`Makefile`](https://github.com/PawelBalcerek/observe-it/blob/main/Makefile) encapsulates these lifecycle
+operations:
 
 - `make up`: Packages OCI container images with the Paketo OpenTelemetry Java Agent (via `./gradlew bootBuildImage`)
   and starts all six Docker Compose containers in detached mode (`docker compose up -d`).

@@ -51,7 +51,7 @@ Mixing these two scopes causes practical problems:
 - Manually passing correlation IDs into every log statement adds repetitive boilerplate and misses unhandled exceptions
   caught by framework advice.
 
-**External Sources & Ecosystem Practice:**
+### External Sources & Ecosystem Practice
 
 - [SLF4J 2.0 Fluent Logging API Manual](https://www.slf4j.org/manual.html#fluent) — Specification of the fluent builder
   pattern introduced in SLF4J 2.0, providing native `.addKeyValue()` support without string serialization overhead.
@@ -59,7 +59,7 @@ Mixing these two scopes causes practical problems:
   — Spring Boot's built-in structured logging configuration and common schema formats (such as Elastic Common Schema and
   Logstash) for console and file output.
 
-**In Observe-It:**
+### In Observe-It
 
 Observe-It divides logging metadata strictly between scoped Mapped Diagnostic Context correlation and fluent key-value
 pairs, as codified in
@@ -95,7 +95,7 @@ routine lifecycle events, expected business rejections, and critical infrastruct
   connectivity failures or third-party service timeouts). These events must be logged **with a stacktrace** via
   `.setCause(exception)` to enable rapid root-cause diagnosis.
 
-**External Sources & Ecosystem Practice:**
+### External Sources & Ecosystem Practice
 
 - [OpenTelemetry Semantic Conventions — Exceptions on Logs](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/)
   — Standard conventions for capturing exception details (`exception.type`, `exception.message`, and
@@ -103,7 +103,7 @@ routine lifecycle events, expected business rejections, and critical infrastruct
 - [SLF4J LoggingEventBuilder Javadoc](https://www.slf4j.org/api/org/slf4j/spi/LoggingEventBuilder.html) — API contract
   for `.addKeyValue(String key, Object value)` and `.setCause(Throwable cause)`.
 
-**In Observe-It:**
+### In Observe-It
 
 Attribute keys and error type constants are declared in
 [`OrderTelemetry.kt`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/main/kotlin/com/observeit/observedapp/order/domain/OrderTelemetry.kt)
@@ -250,14 +250,14 @@ bound incrementally as their values become available:
 In addition to populating machine-readable OpenTelemetry payloads, MDC correlation provides immediate developer value
 by rendering contextual identifiers directly into local human-readable console logs.
 
-**External Sources & Ecosystem Practice:**
+### External Sources & Ecosystem Practice
 
 - [SLF4J Mapped Diagnostic Context (MDC)](https://www.slf4j.org/manual.html#mdc) — Upstream SLF4J documentation on
   thread-local diagnostic context and cleanup rules.
 - [OpenTelemetry Logback Appender Instrumentation](https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/logback/logback-appender-1.0/javaagent)
   — Reference for capturing MDC properties into OpenTelemetry log records via runtime configuration.
 
-**In Observe-It:**
+### In Observe-It
 
 Observe-It encapsulates MDC manipulation in
 [`CorrelationContext.kt`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/main/kotlin/com/observeit/observedapp/correlation/CorrelationContext.kt):
@@ -361,14 +361,14 @@ application memory to indexed search storage in a centralized telemetry datastor
    processors map payload structures into standard fields, drop redundant metadata, and enforce explicit type mappings
    (such as dates, keywords, and numeric types) to optimize query performance and index sizing.
 
-**External Sources & Ecosystem Practice:**
+### External Sources & Ecosystem Practice
 
 - [OpenTelemetry Logs Data Model Specification](https://opentelemetry.io/docs/specs/otel/logs/data-model/) — Upstream
   data model defining field structures, resource attributes, and scopes for OTLP log telemetry.
 - [OpenSearch Simple Schema for Observability (SS4O) Log Schema](https://docs.opensearch.org/latest/observing-your-data/ss4o/)
   — OpenSearch schema standard defining root fields and attribute structures for `ss4o_logs-*` indices.
 
-**In Observe-It:**
+### In Observe-It
 
 Observe-It configures this end-to-end pipeline using the zero-code OpenTelemetry Java Agent in
 [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml), the OpenTelemetry
@@ -517,14 +517,14 @@ access to:
 Furthermore, tests execute against plain Logback in standard JVM unit test runners without requiring the OpenTelemetry
 Java Agent or Docker containers, keeping unit and slice test suites hermetic and sub-second.
 
-**External Sources & Ecosystem Practice:**
+### External Sources & Ecosystem Practice
 
 - [Logback ListAppender Javadoc](https://logback.qos.ch/apidocs/ch/qos/logback/core/read/ListAppender.html) — Core
   Logback utility for collecting logging events in an accessible list during tests.
 - [JUnit 5 Extension Model](https://junit.org/junit5/docs/current/user-guide/#extensions) — Lifecycle callbacks
   (`BeforeEachCallback`, `AfterEachCallback`) used to attach, isolate, and detach test fixtures.
 
-**In Observe-It:**
+### In Observe-It
 
 The shared test fixture
 [`LogCapture.kt`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/testFixtures/kotlin/com/observeit/observedapp/test/LogCapture.kt)

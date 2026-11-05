@@ -45,9 +45,10 @@ resolved** while threads still under discussion stay open.
    amended plan (every thread, not just the changed ones), ask whether we are on the same page, and wait. This step
    edits no files. Done when the human's latest reply is an approval of the plan exactly as last restated.
 
-3. **Fix & push.** Implement every _fix_ outcome, run `./gradlew check`, run the `code-review` skill on the branch,
-   amend the single commit (`git commit --amend`, keeping the commit message accurate), and `git push --force-with-lease`.
-   Done when `./gradlew check` is green and the remote branch holds the amended commit.
+3. **Fix & push.** Implement every _fix_ outcome, run the change-scoped verification gate (`make docs-build` and/or
+   `./gradlew check`; see `CONTRIBUTING.md`), run the `code-review` skill on the branch, amend the single commit
+   (`git commit --amend`, keeping the commit message accurate), and `git push --force-with-lease`. Done when the
+   verification gates pass and the remote branch holds the amended commit.
 
 4. **Refresh the PR.** Update the PR title and body (`gh pr edit <n> --title ... --body ...`, using the `pr` skill
    template) so they reflect the amended commit. Done when `gh pr view <n>` matches the updated commit scope.
