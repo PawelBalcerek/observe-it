@@ -26,18 +26,30 @@ docs/
 Update guides in place whenever system architecture, configuration, or behavior changes so they always reflect the
 current state of `main`.
 
-Every section in a narrative guide (`docs/guides/*.md`) follows a **General Pattern → External Sources → In Observe-It**
-progression:
+Every `## H2` section in a narrative guide (`docs/guides/*.md`, excluding `docs/guides/index.md`) follows a **General
+Pattern → External Sources → In Observe-It** progression:
 
 1. **General Pattern First (Domain-Agnostic)**: Explain the transferable observability or engineering pattern first in
    domain-agnostic terms—what problem it solves, how the mechanism works in Spring Boot / SLF4J / OpenTelemetry /
-   OpenSearch, and what rules of thumb apply in any production service—before introducing Observe-It's domain classes.
-2. **External Sources & Ecosystem Practice (When Applicable)**: Where the pattern reflects broader industry or upstream
-   practice, cite authoritative external sources (specifications, official framework manuals, or reference architectures
-   such as `open-telemetry/opentelemetry-demo`). When a mechanism is purely specific to Observe-It's sandbox design,
-   omit external citations rather than forcing artificial links.
-3. **In Observe-It (Concrete Repository Example)**: Present Observe-It's implementation (`Order` domain classes,
-   configuration files, and tests) as the concrete reference example illustrating the general pattern.
+   OpenSearch, and what rules of thumb apply in any production service. Keep the prose, bullet lists, code/key examples,
+   and Mermaid diagrams in this part strictly domain-agnostic: use generic systems terminology (`request.id`, `user.id`,
+   `entity.id`, `Ingress Filter`, `Domain Service`) and never leak Observe-It domain glossary terms (**Order**,
+   **Checkout Scenario**), repository class/file/pipeline names (`MdcCorrelationFilter`, `observe-it-logs-pipeline`), or
+   Observe-It-specific schema normalization decisions (such as promoting `body` → `message` or `severity.text` → `level`)
+   before `### In Observe-It`.
+2. **`### External Sources & Ecosystem Practice` (When Applicable)**: Where the pattern reflects broader industry or
+   upstream practice, cite authoritative external sources (specifications, official framework manuals, or reference
+   architectures such as `open-telemetry/opentelemetry-demo`). State only what each upstream source itself documents (and
+   how it relates when Observe-It takes a different path), with zero unverified generalizations about industry adoption
+   (such as `"often"`, `"most teams"`, or `"typically in the industry"`). When a mechanism is purely specific to
+   Observe-It's sandbox design, omit external citations rather than forcing artificial links.
+3. **`### In Observe-It` (Concrete Repository Example)**: Present Observe-It's implementation (`Order` domain classes,
+   configuration files, and tests) as the concrete reference example illustrating the general pattern. When the **General
+   Pattern** enumerates a taxonomy implemented in the repository (such as `DEBUG`, `INFO`, `WARN`, and `ERROR` log
+   severities), illustrate every entry in `### In Observe-It`.
+
+Write direct, plain technical prose in narrative guides: state each point once without restating a numbered list in a
+trailing summary paragraph, and use concrete transitions instead of vague back-references (`also`).
 
 ### Append-Only Atomic ADRs (`docs/adr/NNNN-*.md` & `docs/adr/index.md`)
 
@@ -92,7 +104,11 @@ line or `## Context` section.
   Markdown without YAML frontmatter so files render cleanly in GitHub's native file viewer and VitePress infers page
   titles from the `# H1` heading.
 - **Heading hierarchy**: Start every document with a single `# H1` title (`MD025`), followed by hierarchical `## H2` and
-  `### H3` sections without skipping levels (`MD001`, matching VitePress `outline: [2, 3]`).
+  `### H3` sections without skipping levels (`MD001`, matching VitePress `outline: [2, 3]`). In narrative guides
+  (`docs/guides/*.md`, excluding `docs/guides/index.md`), open the first section with an explicit `## H2` heading
+  immediately after `# H1`, and mark the progression steps inside each `## H2` section with
+  `### External Sources & Ecosystem Practice` and `### In Observe-It` H3 subheadings rather than bold inline labels so
+  every section and subsection is indexed in the VitePress table of contents.
 - **120-character line wrapping & aligned tables**: Wrap prose paragraphs, blockquotes, and list items at 120 characters
   (`MD013` in `docs/.markdownlint-cli2.jsonc`, matching `.editorconfig`). Markdown tables (`tables: false`), fenced code
   blocks (`code_blocks: false`), headings (`headings: false`), and unbreakable inline URLs (`strict: false`) are exempt
