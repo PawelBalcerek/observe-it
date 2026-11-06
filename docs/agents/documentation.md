@@ -120,9 +120,11 @@ line or `## Context` section.
   - Pair concise, focused code or config excerpts with a link to the full source file rather than pasting entire classes
     or configuration files into guides.
 - **Mermaid diagrams**:
-  - Use fenced ```` ```mermaid ```` blocks (`flowchart LR`, `flowchart TD`, `sequenceDiagram`).
+  - Use fenced ```` ```mermaid ```` blocks (`flowchart LR`, `flowchart TD`, `sequenceDiagram`), rendered interactively
+    with zoom, pan, and fullscreen controls via `vitepress-mermaid-renderer`.
   - Quote every node label containing parentheses, brackets, colons, or slashes (for example,
     `OA["Observed App (:8080)"]`) and keep node labels free of raw HTML tags.
+  - All diagrams are validated via `mermaid.parse()` during linting (`docs/scripts/lint-mermaid.mjs`).
 - **GitHub-Flavored Markdown alerts**: Use `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, and `> [!CAUTION]`
   sparingly for high-signal callouts. Keep alerts top-level and separated by prose rather than nested or placed
   back-to-back.
@@ -147,6 +149,7 @@ line or `## Context` section.
 ## 5. Verification (`make docs-build`)
 
 Before committing changes to any `.md` file, docs configuration, or documentation tooling, run `make docs-build` (or
-`make -C docs build`, or `make docs-lint` for lint-only checks) to execute `markdownlint-cli2` across all repository
-Markdown files and `vitepress build` with strict dead-link checking. When changes touch only documentation or Markdown,
-`make docs-build` is the primary verification gate (without running `./gradlew check`).
+`make -C docs build`, or `make docs-lint` for lint-only checks) to execute `markdownlint-cli2` and `mermaid.parse()`
+syntax validation (`docs/scripts/lint-mermaid.mjs`) across all repository Markdown files and `vitepress build` with
+strict dead-link checking. When changes touch only documentation or Markdown, `make docs-build` is the primary
+verification gate (without running `./gradlew check`).

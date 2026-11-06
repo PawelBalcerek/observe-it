@@ -14,7 +14,8 @@ sample:
 
 Skip anything already enforced by `./gradlew check` (Ktlint and Detekt in
 [`config/detekt/detekt.yml`](config/detekt/detekt.yml)) or `make docs-build` (`markdownlint-cli2` in
-[`docs/.markdownlint-cli2.jsonc`](docs/.markdownlint-cli2.jsonc) and `vitepress build` dead-link checking).
+[`docs/.markdownlint-cli2.jsonc`](docs/.markdownlint-cli2.jsonc), `mermaid.parse()` syntax validation in
+[`docs/scripts/lint-mermaid.mjs`](docs/scripts/lint-mermaid.mjs), and `vitepress build` dead-link checking).
 
 ## Review-only checks
 
