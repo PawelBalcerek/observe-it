@@ -56,6 +56,10 @@ export default withMermaid(
               text: 'Structured Logging in Kotlin & Spring Boot',
               link: '/guides/structured-logging',
             },
+            {
+              text: 'Checkout Scenarios & Dashboards Walkthrough',
+              link: '/guides/exploring-telemetry',
+            },
           ],
         },
         {
