@@ -40,8 +40,9 @@ with `./gradlew ktlintFormat` if needed. Reviews check diffs against `CODING_STA
 Role-based `docs/` layout (`docs/index.md`, living `docs/guides/*` following General Pattern → External Sources → In
 Observe-It, append-only atomic `docs/adr/NNNN-*.md`), zero YAML frontmatter, 120-character Markdown line wrapping, code
 block / Mermaid / cross-linking rules, and `CONTEXT.md` glossary adherence. Before committing changes to any `.md` file
-or docs configuration, run `make docs-build` (`markdownlint-cli2` and `vitepress build`). Read before writing or
-modifying any documentation or Markdown file. See `docs/agents/documentation.md`.
+or docs configuration, run `make docs-build` (`markdownlint-cli2`, `mermaid.parse()` syntax linting, and
+`vitepress build`). Read before writing or modifying any documentation or Markdown file. See
+`docs/agents/documentation.md`.
 
 ### Git & PR workflow
 
