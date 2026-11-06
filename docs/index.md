@@ -74,8 +74,8 @@ trade-offs, and consequences. See the [ADR Index](./adr/index.md) for more.
 
 ## Official Upstream References
 
-Observe-It focuses on how these tools fit together in a production-style Kotlin/Spring Boot system and delegates vendor
-fundamentals to canonical upstream documentation:
+Observe-It focuses on how these tools fit together in a production-style Kotlin/Spring Boot system, delegating vendor
+fundamentals to canonical upstream documentation alongside core repository entry points:
 
 - [OpenTelemetry Java Zero-Code Instrumentation](https://opentelemetry.io/docs/zero-code/java/agent/) — Java Agent
   configuration, system properties, and supported libraries.
@@ -87,5 +87,7 @@ fundamentals to canonical upstream documentation:
   querying structured fields in Discover.
 - [SLF4J 2 Fluent Logging API](https://www.slf4j.org/manual.html#fluent) — Structured `.atInfo().addKeyValue(...)`
   logging on the JVM.
+- [Observe-It Repository README](https://github.com/PawelBalcerek/observe-it/blob/main/README.md) — Self-contained
+  repository front door, 5-minute Quick Start, and codebase navigation map.
 - [Contributing & Git Workflow](https://github.com/PawelBalcerek/observe-it/blob/main/CONTRIBUTING.md) — Issue-first
   workflow, branch conventions, and quality gates.
