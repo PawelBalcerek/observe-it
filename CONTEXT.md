@@ -26,3 +26,7 @@ workload profile
 
 **SS4O Log Index**: The OpenSearch index conforming to the Simple Schema for Observability where structured log records
 from the Observed App and Traffic Generator are stored and queried. _Avoid_: Log bucket, log table, ELK index
+
+**SS4O Metrics Index**: The OpenSearch index conforming to the Simple Schema for Observability where OTLP metric data
+points from the Observed App and Traffic Generator are stored and queried. _Avoid_: Metrics bucket, metrics table,
+Prometheus store
