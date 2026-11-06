@@ -37,7 +37,8 @@ docker compose up -d
 Once all containers are healthy, open OpenSearch Dashboards at `http://localhost:5601`, navigate to **Discover**, and
 open any of the 4 pre-bootstrapped saved searches (`All Order Logs`, `Warnings & Business Rejections`, `Gateway Timeouts
 & Stack Traces`, or `Checkout Scenario Explorer`) to inspect live structured logs in the `ss4o_logs-*` **SS4O Log
-Index**.
+Index**. For a step-by-step walkthrough on triggering scenarios and exploring telemetry, follow the [Checkout Scenarios
+& Dashboards Walkthrough](./guides/exploring-telemetry.md).
 
 To stop the stack and remove volumes:
 
@@ -55,6 +56,8 @@ Explore living narrative and operational guides in the [Guides Overview](./guide
   OpenTelemetry Java Agent buildpack, OpenTelemetry Collector pipeline, and OpenSearch bootstrap.
 - [Structured Logging in Kotlin & Spring Boot](./guides/structured-logging.md) — SLF4J 2 fluent key-value logging,
   scoped MDC correlation, Logback OTLP bridge, SS4O document normalization, and in-memory unit testing.
+- [Checkout Scenarios & Dashboards Walkthrough](./guides/exploring-telemetry.md) — Seven Checkout Scenario paths,
+  interactive Traffic Generator REST API, and OpenSearch Dashboards / DQL investigation workflows.
 
 ### Architecture Decision Records
 
