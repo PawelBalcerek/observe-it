@@ -75,7 +75,7 @@ services:
       - observe-it-net
 
   observed-app:
-    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/observed-app:${OBSERVE_IT_IMAGE_TAG:-0.1.0}
+    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/observed-app:${OBSERVE_IT_IMAGE_TAG:-0.2.0}
     container_name: observed-app
     pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}
     mem_limit: 512m
@@ -85,7 +85,7 @@ services:
       - BPL_JVM_THREAD_COUNT=50
       - OTEL_JAVAAGENT_ENABLED=true
       - OTEL_SERVICE_NAME=observed-app
-      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.1.0},deployment.environment.name=local
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local
       - OTEL_LOGS_EXPORTER=otlp
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
@@ -108,7 +108,7 @@ services:
       - observe-it-net
 
   traffic-generator:
-    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/traffic-generator:${OBSERVE_IT_IMAGE_TAG:-0.1.0}
+    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/traffic-generator:${OBSERVE_IT_IMAGE_TAG:-0.2.0}
     container_name: traffic-generator
     pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}
     mem_limit: 512m
@@ -119,7 +119,7 @@ services:
       - BPL_JVM_THREAD_COUNT=50
       - OTEL_JAVAAGENT_ENABLED=true
       - OTEL_SERVICE_NAME=traffic-generator
-      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.1.0},deployment.environment.name=local
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local
       - OTEL_LOGS_EXPORTER=otlp
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none

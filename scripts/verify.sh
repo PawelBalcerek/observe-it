@@ -7,7 +7,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-IMAGE_TAG="${OBSERVE_IT_IMAGE_TAG:-0.1.0}"
+IMAGE_TAG="${OBSERVE_IT_IMAGE_TAG:-0.2.0}"
 GHCR_PREFIX="${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}"
 
 echo "========================================================================"
@@ -15,31 +15,47 @@ echo " Starting End-to-End Verification Suite (make verify)"
 echo "========================================================================"
 
 # ----------------------------------------------------------------------
-# Gate 1: Build & Zero-SDK Gate
+# Gate 1: Build & API-Only OpenTelemetry Runtime Classpath Boundary Gate
 # ----------------------------------------------------------------------
 echo ""
 echo "------------------------------------------------------------------------"
-echo " Gate 1: Build & Zero-SDK Gate"
+echo " Gate 1: Build & API-Only OpenTelemetry Runtime Classpath Boundary Gate"
 echo "------------------------------------------------------------------------"
 
 echo "==> Verifying ./gradlew check passes..."
 ./gradlew check
 
-echo "==> Verifying neither :observed-app nor :traffic-generator runtime classpath contains io.opentelemetry..."
-OBSERVED_APP_OTEL="$(./gradlew :observed-app:dependencies --configuration runtimeClasspath | grep -i "io.opentelemetry" || true)"
-if [ -n "${OBSERVED_APP_OTEL}" ]; then
-  echo "FAIL: :observed-app runtime classpath contains io.opentelemetry:"
-  echo "${OBSERVED_APP_OTEL}"
-  exit 1
-fi
+verify_otel_api_boundary() {
+  local service="$1"
+  echo "==> Verifying ${service} runtime classpath contains only OpenTelemetry API (zero SDK or instrumentation)..."
+  local deps
+  deps="$(./gradlew "${service}:dependencies" --configuration runtimeClasspath)"
 
-TRAFFIC_GEN_OTEL="$(./gradlew :traffic-generator:dependencies --configuration runtimeClasspath | grep -i "io.opentelemetry" || true)"
-if [ -n "${TRAFFIC_GEN_OTEL}" ]; then
-  echo "FAIL: :traffic-generator runtime classpath contains io.opentelemetry:"
-  echo "${TRAFFIC_GEN_OTEL}"
-  exit 1
-fi
-echo "Zero-SDK runtime classpath verified (0 io.opentelemetry dependencies)."
+  if ! echo "${deps}" | grep -q "io.opentelemetry:opentelemetry-api"; then
+    echo "FAIL: ${service} runtime classpath does not contain io.opentelemetry:opentelemetry-api"
+    exit 1
+  fi
+
+  local disallowed
+  disallowed="$(echo "${deps}" | grep -E "io\.opentelemetry:opentelemetry-sdk|io\.opentelemetry\.instrumentation" || true)"
+  if [ -n "${disallowed}" ]; then
+    echo "FAIL: ${service} runtime classpath contains disallowed OpenTelemetry dependencies:"
+    echo "${disallowed}"
+    exit 1
+  fi
+
+  local unexpected
+  unexpected="$(echo "${deps}" | grep -E "io\.opentelemetry(\.instrumentation)?:" | grep -vE "io\.opentelemetry:opentelemetry-(api|context|common)" || true)"
+  if [ -n "${unexpected}" ]; then
+    echo "FAIL: ${service} runtime classpath contains unexpected OpenTelemetry dependencies:"
+    echo "${unexpected}"
+    exit 1
+  fi
+}
+
+verify_otel_api_boundary ":observed-app"
+verify_otel_api_boundary ":traffic-generator"
+echo "API-only OpenTelemetry runtime classpath boundary verified (io.opentelemetry:opentelemetry-api only, 0 SDK or instrumentation)."
 
 echo "==> Verifying observe-it/observed-app:${IMAGE_TAG} and ${GHCR_PREFIX}/observed-app:${IMAGE_TAG} images exist..."
 docker image inspect "observe-it/observed-app:${IMAGE_TAG}" >/dev/null 2>&1 || {
@@ -60,7 +76,7 @@ docker image inspect "${GHCR_PREFIX}/traffic-generator:${IMAGE_TAG}" >/dev/null 
   echo "FAIL: Image ${GHCR_PREFIX}/traffic-generator:${IMAGE_TAG} not found"
   exit 1
 }
-echo "Gate 1 PASSED: Build & Zero-SDK Gate"
+echo "Gate 1 PASSED: Build & API-Only OpenTelemetry Runtime Classpath Boundary Gate"
 
 # ----------------------------------------------------------------------
 # Gate 2: Container & Bootstrap Health Gate
