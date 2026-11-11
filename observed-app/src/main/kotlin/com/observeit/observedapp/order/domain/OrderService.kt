@@ -1,14 +1,26 @@
 package com.observeit.observedapp.order.domain
 
 import com.observeit.observedapp.correlation.CorrelationContext
+import com.observeit.observedapp.order.domain.InventoryOutcome.LOW_STOCK_WARNING
+import com.observeit.observedapp.order.domain.InventoryOutcome.OUT_OF_STOCK
+import com.observeit.observedapp.order.domain.InventoryOutcome.RESERVED
 import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderState.FAILED
+import com.observeit.observedapp.order.domain.OrderTelemetry.ErrorType
 import com.observeit.observedapp.order.domain.OrderTelemetry.Key
+import com.observeit.observedapp.order.domain.PaymentOutcome.DECLINED
+import com.observeit.observedapp.order.domain.PaymentOutcome.SUCCESS
+import com.observeit.observedapp.order.domain.PaymentOutcome.TIMEOUT
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
 
 @Service
-class OrderService(private val orderRepository: OrderRepository, private val paymentGateway: PaymentGateway) {
+class OrderService(
+    private val orderRepository: OrderRepository,
+    private val paymentGateway: PaymentGateway,
+    private val orderMetrics: OrderMetrics,
+) {
     private val logger = LoggerFactory.getLogger(OrderService::class.java)
 
     fun createOrder(customerId: String, items: List<OrderLineItem>): Order {
@@ -23,6 +35,7 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         )
 
         val saved = orderRepository.save(order)
+        orderMetrics.recordOrderCreated(saved.currency)
 
         logger.atInfo()
             .addKeyValue(Key.ORDER_STATE, saved.state.name)
@@ -50,11 +63,14 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
     fun reserveOrder(orderId: String): Order {
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
-        val reserved = order.reserve()
+        val reserved = withStateTransitionErrorRecording { order.reserve() }
 
         val outOfStockItem = order.items.firstOrNull { it.sku == SKU_OUT_OF_STOCK }
         if (outOfStockItem != null) {
             orderRepository.save(order.fail())
+            orderMetrics.recordStateTransition(previousState, FAILED)
+            orderMetrics.recordInventoryReservation(outOfStockItem.sku, OUT_OF_STOCK)
+            orderMetrics.recordError(ErrorType.OUT_OF_STOCK)
             throw OutOfStockException(
                 sku = outOfStockItem.sku,
                 requestedQuantity = outOfStockItem.quantity.toLong(),
@@ -63,8 +79,16 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         }
 
         orderRepository.save(reserved)
+        orderMetrics.recordStateTransition(previousState, reserved.state)
 
         reserved.items.forEach { item ->
+            val outcome = if (item.sku == SKU_LOW_STOCK) {
+                LOW_STOCK_WARNING
+            } else {
+                RESERVED
+            }
+            orderMetrics.recordInventoryReservation(item.sku, outcome)
+
             if (item.sku == SKU_LOW_STOCK) {
                 logger.atWarn()
                     .addKeyValue(Key.INVENTORY_SKU, item.sku)
@@ -91,13 +115,12 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
     fun payOrder(orderId: String, paymentMethod: PaymentMethod): Order {
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
-        val paid = order.pay()
+        val paid = withStateTransitionErrorRecording { order.pay() }
 
-        runCatching { paymentGateway.processPayment(order.id, order.totalAmount, order.currency, paymentMethod) }
-            .onFailure { orderRepository.save(order.fail()) }
-            .getOrThrow()
+        executePayment(order, previousState, paymentMethod)
 
         orderRepository.save(paid)
+        orderMetrics.recordStateTransition(previousState, paid.state)
 
         logger.atInfo()
             .addKeyValue(Key.ORDER_STATE, paid.state.name)
@@ -113,7 +136,10 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
 
-        val shipped = orderRepository.save(order.ship())
+        val toShip = withStateTransitionErrorRecording { order.ship() }
+
+        val shipped = orderRepository.save(toShip)
+        orderMetrics.recordStateTransition(previousState, shipped.state)
 
         logger.atInfo()
             .addKeyValue(Key.ORDER_STATE, shipped.state.name)
@@ -128,7 +154,10 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
 
-        val cancelled = orderRepository.save(order.cancel())
+        val toCancel = withStateTransitionErrorRecording { order.cancel() }
+
+        val cancelled = orderRepository.save(toCancel)
+        orderMetrics.recordStateTransition(previousState, cancelled.state)
 
         logger.atInfo()
             .addKeyValue(Key.ORDER_STATE, cancelled.state.name)
@@ -137,6 +166,36 @@ class OrderService(private val orderRepository: OrderRepository, private val pay
             .log("Order cancelled")
 
         return cancelled
+    }
+
+    private inline fun <T> withStateTransitionErrorRecording(transition: () -> T): T = try {
+        transition()
+    } catch (exception: InvalidOrderStateTransitionException) {
+        orderMetrics.recordError(ErrorType.INVALID_STATE_TRANSITION)
+        throw exception
+    }
+
+    private fun executePayment(order: Order, previousState: OrderState, paymentMethod: PaymentMethod) {
+        try {
+            paymentGateway.processPayment(order.id, order.totalAmount, order.currency, paymentMethod)
+            orderMetrics.recordPaymentDuration(
+                paymentMethod,
+                SUCCESS,
+                STANDARD_PAYMENT_LATENCY_MS.toDouble(),
+            )
+        } catch (exception: PaymentDeclinedException) {
+            orderRepository.save(order.fail())
+            orderMetrics.recordStateTransition(previousState, FAILED)
+            orderMetrics.recordPaymentDuration(paymentMethod, DECLINED, exception.latencyMs.toDouble())
+            orderMetrics.recordError(ErrorType.PAYMENT_DECLINED)
+            throw exception
+        } catch (exception: PaymentGatewayTimeoutException) {
+            orderRepository.save(order.fail())
+            orderMetrics.recordStateTransition(previousState, FAILED)
+            orderMetrics.recordPaymentDuration(paymentMethod, TIMEOUT, exception.latencyMs.toDouble())
+            orderMetrics.recordError(ErrorType.GATEWAY_TIMEOUT)
+            throw exception
+        }
     }
 
     private fun loadOrderWithCorrelation(orderId: String): Order {

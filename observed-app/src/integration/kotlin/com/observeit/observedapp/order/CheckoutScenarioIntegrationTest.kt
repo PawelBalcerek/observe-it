@@ -19,6 +19,7 @@ import com.observeit.observedapp.order.domain.OrderState.SHIPPED
 import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
 import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
 import com.observeit.observedapp.test.LogCapture
+import com.observeit.observedapp.test.MetricCapture
 import com.observeit.observedapp.test.shouldBeConflictError
 import com.observeit.observedapp.test.shouldBeGatewayTimeoutError
 import com.observeit.observedapp.test.shouldBeUnprocessableEntityError
@@ -32,6 +33,10 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
     @JvmField
     @RegisterExtension
     final val logCapture = LogCapture(level = DEBUG)
+
+    @JvmField
+    @RegisterExtension
+    final val metricCapture = MetricCapture()
 
     private val orderApi by lazy { OrderApiFixture(restTestClient) }
 
@@ -74,79 +79,11 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         order shouldBe anOrderResponse(orderId = created.orderId, state = SHIPPED)
 
         // and
-        val expectedMdc = mapOf(
-            "checkout.scenario" to checkoutScenario,
-            "order.id" to created.orderId,
-            "customer.id" to "customerId",
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = DEBUG,
-            message = "Inventory reserved for sku (1/100)",
-            keyValues = mapOf(
-                "inventory.sku" to "sku",
-                "inventory.requested_quantity" to 1L,
-                "inventory.available_quantity" to 100L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order reserved",
-            keyValues = mapOf(
-                "order.state" to "RESERVED",
-                "order.previous_state" to "CREATED",
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order paid",
-            keyValues = mapOf(
-                "order.state" to "PAID",
-                "order.previous_state" to "RESERVED",
-                "payment.method" to "CREDIT_CARD",
-                "payment.latency_ms" to 50L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order shipped",
-            keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.previous_state" to "PAID",
-                "shipping.method" to "STANDARD",
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderReservedTelemetry(created.orderId, checkoutScenario)
+        assertCreditCardPaymentTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderShippedTelemetry(created.orderId, checkoutScenario)
+        assertOrderRetrievedTelemetry(created.orderId, "SHIPPED", checkoutScenario)
     }
 
     @Test
@@ -192,24 +129,13 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         )
 
         // and
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+
         val expectedMdc = mapOf(
             "checkout.scenario" to checkoutScenario,
             "order.id" to created.orderId,
             "customer.id" to "customerId",
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
         val lowStockEvent = logCapture.assertLogged(
             level = WARN,
             message = "Low stock for SKU-LOW-STOCK (1/2)",
@@ -231,41 +157,28 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
             ),
             mdc = expectedMdc,
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order paid",
-            keyValues = mapOf(
-                "order.state" to "PAID",
-                "order.previous_state" to "RESERVED",
-                "payment.method" to "CREDIT_CARD",
-                "payment.latency_ms" to 50L,
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "RESERVED",
             ),
-            mdc = expectedMdc,
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "SKU-LOW-STOCK",
+                "inventory.outcome" to "LOW_STOCK_WARNING",
+            ),
         )
 
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order shipped",
-            keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.previous_state" to "PAID",
-                "shipping.method" to "STANDARD",
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
+        assertCreditCardPaymentTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderShippedTelemetry(created.orderId, checkoutScenario)
+        assertOrderRetrievedTelemetry(created.orderId, "SHIPPED", checkoutScenario)
     }
 
     @Test
@@ -302,24 +215,13 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         )
 
         // and
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+
         val expectedMdc = mapOf(
             "checkout.scenario" to checkoutScenario,
             "order.id" to created.orderId,
             "customer.id" to "customerId",
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
         val outOfStockEvent = logCapture.assertLogged(
             level = WARN,
             message = "Inventory out of stock for SKU-OUT-OF-STOCK",
@@ -333,16 +235,31 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         )
         outOfStockEvent.throwableProxy shouldBe null
 
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
+        assertOrderRetrievedTelemetry(created.orderId, "FAILED", checkoutScenario)
+
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
                 "order.state" to "FAILED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
             ),
-            mdc = expectedMdc,
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "SKU-OUT-OF-STOCK",
+                "inventory.outcome" to "OUT_OF_STOCK",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "OUT_OF_STOCK"),
         )
     }
 
@@ -383,34 +300,14 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         order shouldBe anOrderResponse(orderId = created.orderId, state = FAILED)
 
         // and
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderReservedTelemetry(created.orderId, checkoutScenario)
+
         val expectedMdc = mapOf(
             "checkout.scenario" to checkoutScenario,
             "order.id" to created.orderId,
             "customer.id" to "customerId",
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order reserved",
-            keyValues = mapOf(
-                "order.state" to "RESERVED",
-                "order.previous_state" to "CREATED",
-            ),
-            mdc = expectedMdc,
-        )
-
         val declinedEvent = logCapture.assertLogged(
             level = WARN,
             message = "Payment declined for method DECLINED_CARD",
@@ -423,16 +320,32 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         )
         declinedEvent.throwableProxy shouldBe null
 
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
+        assertOrderRetrievedTelemetry(created.orderId, "FAILED", checkoutScenario)
+
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
                 "order.state" to "FAILED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
             ),
-            mdc = expectedMdc,
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 50.0,
+            attributes = mapOf(
+                "payment.method" to "DECLINED_CARD",
+                "payment.outcome" to "DECLINED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "PAYMENT_DECLINED"),
         )
     }
 
@@ -473,34 +386,14 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         order shouldBe anOrderResponse(orderId = created.orderId, state = FAILED)
 
         // and
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderReservedTelemetry(created.orderId, checkoutScenario)
+
         val expectedMdc = mapOf(
             "checkout.scenario" to checkoutScenario,
             "order.id" to created.orderId,
             "customer.id" to "customerId",
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order reserved",
-            keyValues = mapOf(
-                "order.state" to "RESERVED",
-                "order.previous_state" to "CREATED",
-            ),
-            mdc = expectedMdc,
-        )
-
         val timeoutEvent = logCapture.assertLogged(
             level = ERROR,
             message = "Payment gateway timed out for method TIMEOUT_GATEWAY",
@@ -514,16 +407,33 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         (latencyMs >= 1000L) shouldBe true
         timeoutEvent.throwableProxy.shouldNotBeNull()
 
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
+        assertOrderRetrievedTelemetry(created.orderId, "FAILED", checkoutScenario)
+
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
                 "order.state" to "FAILED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
             ),
-            mdc = expectedMdc,
+        )
+        val paymentPoint = metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            attributes = mapOf(
+                "payment.method" to "TIMEOUT_GATEWAY",
+                "payment.outcome" to "TIMEOUT",
+            ),
+        )
+        (paymentPoint.sum >= 1000.0) shouldBe true
+
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "GATEWAY_TIMEOUT"),
         )
     }
 
@@ -564,34 +474,14 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         order shouldBe anOrderResponse(orderId = created.orderId, state = CANCELLED)
 
         // and
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderReservedTelemetry(created.orderId, checkoutScenario)
+
         val expectedMdc = mapOf(
             "checkout.scenario" to checkoutScenario,
             "order.id" to created.orderId,
             "customer.id" to "customerId",
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order reserved",
-            keyValues = mapOf(
-                "order.state" to "RESERVED",
-                "order.previous_state" to "CREATED",
-            ),
-            mdc = expectedMdc,
-        )
-
         logCapture.assertLogged(
             level = INFO,
             message = "Order cancelled",
@@ -603,16 +493,16 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
             mdc = expectedMdc,
         )
 
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
+        assertOrderRetrievedTelemetry(created.orderId, "CANCELLED", checkoutScenario)
+
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
                 "order.state" to "CANCELLED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
             ),
-            mdc = expectedMdc,
         )
     }
 
@@ -660,34 +550,14 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         order shouldBe anOrderResponse(orderId = created.orderId, state = CANCELLED)
 
         // and
+        assertOrderCreatedTelemetry(created.orderId, checkoutScenario)
+        assertStandardOrderReservedTelemetry(created.orderId, checkoutScenario)
+
         val expectedMdc = mapOf(
             "checkout.scenario" to checkoutScenario,
             "order.id" to created.orderId,
             "customer.id" to "customerId",
         )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = expectedMdc,
-        )
-
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order reserved",
-            keyValues = mapOf(
-                "order.state" to "RESERVED",
-                "order.previous_state" to "CREATED",
-            ),
-            mdc = expectedMdc,
-        )
-
         logCapture.assertLogged(
             level = INFO,
             message = "Order cancelled",
@@ -710,16 +580,177 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         )
         invalidTransitionEvent.throwableProxy shouldBe null
 
+        assertOrderRetrievedTelemetry(created.orderId, "CANCELLED", checkoutScenario)
+
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "CANCELLED",
+            ),
+        )
+
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
+    }
+
+    private fun assertOrderCreatedTelemetry(orderId: String, checkoutScenario: String) {
+        val expectedMdc = mapOf(
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to orderId,
+            "customer.id" to "customerId",
+        )
         logCapture.assertLogged(
             level = INFO,
-            message = "Order retrieved",
+            message = "Order created",
             keyValues = mapOf(
-                "order.state" to "CANCELLED",
+                "order.state" to "CREATED",
                 "order.total_amount" to 10.0,
                 "order.currency" to "USD",
                 "order.item_count" to 1L,
             ),
             mdc = expectedMdc,
+        )
+        metricCapture.assertCounterIncremented(
+            name = "orders.created",
+            unit = "{order}",
+            delta = 1L,
+            attributes = mapOf("order.currency" to "USD"),
+        )
+    }
+
+    private fun assertOrderRetrievedTelemetry(orderId: String, state: String, checkoutScenario: String) {
+        val expectedMdc = mapOf(
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to orderId,
+            "customer.id" to "customerId",
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order retrieved",
+            keyValues = mapOf(
+                "order.state" to state,
+                "order.total_amount" to 10.0,
+                "order.currency" to "USD",
+                "order.item_count" to 1L,
+            ),
+            mdc = expectedMdc,
+        )
+    }
+
+    private fun assertStandardOrderReservedTelemetry(orderId: String, checkoutScenario: String) {
+        val expectedMdc = mapOf(
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to orderId,
+            "customer.id" to "customerId",
+        )
+        logCapture.assertLogged(
+            level = DEBUG,
+            message = "Inventory reserved for sku (1/100)",
+            keyValues = mapOf(
+                "inventory.sku" to "sku",
+                "inventory.requested_quantity" to 1L,
+                "inventory.available_quantity" to 100L,
+            ),
+            mdc = expectedMdc,
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order reserved",
+            keyValues = mapOf(
+                "order.state" to "RESERVED",
+                "order.previous_state" to "CREATED",
+            ),
+            mdc = expectedMdc,
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "RESERVED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "sku",
+                "inventory.outcome" to "RESERVED",
+            ),
+        )
+    }
+
+    private fun assertCreditCardPaymentTelemetry(orderId: String, checkoutScenario: String) {
+        val expectedMdc = mapOf(
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to orderId,
+            "customer.id" to "customerId",
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order paid",
+            keyValues = mapOf(
+                "order.state" to "PAID",
+                "order.previous_state" to "RESERVED",
+                "payment.method" to "CREDIT_CARD",
+                "payment.latency_ms" to 50L,
+            ),
+            mdc = expectedMdc,
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "PAID",
+            ),
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 50.0,
+            attributes = mapOf(
+                "payment.method" to "CREDIT_CARD",
+                "payment.outcome" to "SUCCESS",
+            ),
+        )
+    }
+
+    private fun assertStandardOrderShippedTelemetry(orderId: String, checkoutScenario: String) {
+        val expectedMdc = mapOf(
+            "checkout.scenario" to checkoutScenario,
+            "order.id" to orderId,
+            "customer.id" to "customerId",
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order shipped",
+            keyValues = mapOf(
+                "order.state" to "SHIPPED",
+                "order.previous_state" to "PAID",
+                "shipping.method" to "STANDARD",
+            ),
+            mdc = expectedMdc,
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "PAID",
+                "order.state" to "SHIPPED",
+            ),
         )
     }
 }
