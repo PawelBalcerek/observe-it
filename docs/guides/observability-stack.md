@@ -168,10 +168,10 @@ tasks.named<BootBuildImage>("bootBuildImage") {
 ```
 
 This configuration ensures that both `observed-app` and `traffic-generator` build images containing the OpenTelemetry
-Java Agent without adding any OpenTelemetry compile or runtime dependencies to their Gradle build scripts. The test
-suite enforces this boundary:
-[`ClasspathVerificationTest`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/test/kotlin/com/observeit/observedapp/ClasspathVerificationTest.kt)
-asserts that no `io.opentelemetry.*` classes exist on the application classpath.
+Java Agent while depending strictly on `io.opentelemetry:opentelemetry-api` at compile time, keeping the SDK and
+instrumentation agent out of the application runtime classpath. The verification suite enforces this boundary:
+`make verify` Gate 1 asserts that the `runtimeClasspath` of each service contains only
+`io.opentelemetry:opentelemetry-api` (and its transitive context) with zero SDK or instrumentation artifacts.
 
 At runtime, [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) activates
 the agent and configures the Logback OTLP bridge via environment variables:
@@ -181,7 +181,7 @@ environment:
   - BPL_JVM_THREAD_COUNT=50
   - OTEL_JAVAAGENT_ENABLED=true
   - OTEL_SERVICE_NAME=observed-app
-  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.1.0},deployment.environment.name=local
+  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local
   - OTEL_LOGS_EXPORTER=otlp
   - OTEL_TRACES_EXPORTER=none
   - OTEL_METRICS_EXPORTER=none
@@ -391,17 +391,17 @@ operations:
 
 Docker Compose supports variable parameterization for image coordinates and pull policies:
 
-- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.1.0}`
+- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.2.0}`
 - `pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}`
-- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.1.0},deployment.environment.name=local`
+- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local`
 
 This dual-mode design enables two core development workflows:
 
 1. **Pre-built GHCR images (Zero-build evaluation)**: Running `docker compose up -d` pulls multi-architecture
    (`linux/amd64` and `linux/arm64`) OCI container images from GitHub Container Registry out of the box when no local
    image exists (`pull_policy: missing`).
-2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.1.0`
-   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.1.0` into the local Docker daemon. Subsequent `docker compose up -d`
+2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.2.0`
+   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.2.0` into the local Docker daemon. Subsequent `docker compose up -d`
    commands use the locally built images without network requests.
 3. **Strict offline / CI verification**: Passing `OBSERVE_IT_PULL_POLICY=never` ensures pull request and branch builds
    strictly verify locally built container images and fail fast if images are missing.

@@ -22,6 +22,8 @@ plugins {
 group = "com.observeit"
 version = rootProject.version
 
+extra["opentelemetry.version"] = libs.versions.opentelemetry.get()
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
@@ -72,10 +74,12 @@ dependencies {
     implementation(libs.bundles.spring.boot)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
+    implementation(libs.opentelemetry.api)
     testFixturesApi(libs.bundles.spring.boot)
     testFixturesApi(libs.spring.boot.starter.test)
     testFixturesApi(libs.kotest.assertions.core)
     testFixturesApi(libs.awaitility.kotlin)
+    testFixturesApi(libs.opentelemetry.sdk.testing)
 }
 
 tasks.named<BootBuildImage>("bootBuildImage") {
