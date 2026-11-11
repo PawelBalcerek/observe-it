@@ -1,0 +1,23 @@
+changelog:
+  exclude:
+    labels:
+      - wontfix
+  categories:
+    - title: Features & Observability Capabilities
+      labels:
+        - enhancement
+        - feat
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: Documentation & Guides
+      labels:
+        - documentation
+        - docs
+    - title: Dependency Updates
+      labels:
+        - dependencies
+    - title: Other Changes
+      labels:
+        - "*"

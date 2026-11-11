@@ -30,12 +30,22 @@ flowchart LR
 
 ### Prerequisites
 
-- **Java Development Kit**: JDK 25 (or rely on Gradle toolchain auto-provisioning).
 - **Container Runtime**: Docker with Compose v2 and at least ~3 GB available RAM.
+- **Java Development Kit** *(optional, for local builds)*: JDK 25 (or rely on Gradle toolchain auto-provisioning).
 
-### Build & Start
+### Quick Start (Pre-Built Images)
 
-Compile the services, package container images with the Paketo OpenTelemetry Java Agent baked in, and boot the stack:
+Boot the stack directly using pre-built multi-architecture (`linux/amd64` and `linux/arm64`) container images from
+GitHub Container Registry (GHCR):
+
+```bash
+docker compose up -d
+```
+
+### Build from Source & Start
+
+Alternatively, compile the services and package container images locally with the Paketo OpenTelemetry Java Agent
+baked in:
 
 ```bash
 ./gradlew bootBuildImage

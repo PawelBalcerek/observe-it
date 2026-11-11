@@ -17,7 +17,7 @@ logs:
 	docker compose logs -f
 
 verify:
-	./scripts/verify-m1.sh
+	./scripts/verify.sh
 
 docs-dev:
 	$(MAKE) -C docs dev

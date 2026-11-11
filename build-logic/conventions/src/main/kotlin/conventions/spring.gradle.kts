@@ -20,7 +20,7 @@ plugins {
 }
 
 group = "com.observeit"
-version = "0.1.0"
+version = rootProject.version
 
 java {
     toolchain {
@@ -80,6 +80,11 @@ dependencies {
 
 tasks.named<BootBuildImage>("bootBuildImage") {
     imageName.set("observe-it/${project.name}:${project.version}")
+    tags.set(
+        listOf(
+            "ghcr.io/pawelbalcerek/observe-it/${project.name}:${project.version}"
+        )
+    )
     buildpacks.set(
         listOf(
             "urn:cnb:builder:paketo-buildpacks/java",
