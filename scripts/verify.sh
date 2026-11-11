@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# End-to-end Milestone 1 verification suite
-# Enforces five deterministic verification gates against the live Docker Compose environment.
+# End-to-end verification suite
+# Enforces deterministic verification gates against the live Docker Compose environment.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
+IMAGE_TAG="${OBSERVE_IT_IMAGE_TAG:-0.1.0}"
+GHCR_PREFIX="${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}"
+
 echo "========================================================================"
-echo " Starting Milestone 1 End-to-End Verification Suite (make verify)"
+echo " Starting End-to-End Verification Suite (make verify)"
 echo "========================================================================"
 
 # ----------------------------------------------------------------------
@@ -38,15 +41,23 @@ if [ -n "${TRAFFIC_GEN_OTEL}" ]; then
 fi
 echo "Zero-SDK runtime classpath verified (0 io.opentelemetry dependencies)."
 
-echo "==> Verifying observe-it/observed-app:0.1.0 image exists..."
-docker image inspect observe-it/observed-app:0.1.0 >/dev/null 2>&1 || {
-  echo "FAIL: Image observe-it/observed-app:0.1.0 not found"
+echo "==> Verifying observe-it/observed-app:${IMAGE_TAG} and ${GHCR_PREFIX}/observed-app:${IMAGE_TAG} images exist..."
+docker image inspect "observe-it/observed-app:${IMAGE_TAG}" >/dev/null 2>&1 || {
+  echo "FAIL: Image observe-it/observed-app:${IMAGE_TAG} not found"
+  exit 1
+}
+docker image inspect "${GHCR_PREFIX}/observed-app:${IMAGE_TAG}" >/dev/null 2>&1 || {
+  echo "FAIL: Image ${GHCR_PREFIX}/observed-app:${IMAGE_TAG} not found"
   exit 1
 }
 
-echo "==> Verifying observe-it/traffic-generator:0.1.0 image exists..."
-docker image inspect observe-it/traffic-generator:0.1.0 >/dev/null 2>&1 || {
-  echo "FAIL: Image observe-it/traffic-generator:0.1.0 not found"
+echo "==> Verifying observe-it/traffic-generator:${IMAGE_TAG} and ${GHCR_PREFIX}/traffic-generator:${IMAGE_TAG} images exist..."
+docker image inspect "observe-it/traffic-generator:${IMAGE_TAG}" >/dev/null 2>&1 || {
+  echo "FAIL: Image observe-it/traffic-generator:${IMAGE_TAG} not found"
+  exit 1
+}
+docker image inspect "${GHCR_PREFIX}/traffic-generator:${IMAGE_TAG}" >/dev/null 2>&1 || {
+  echo "FAIL: Image ${GHCR_PREFIX}/traffic-generator:${IMAGE_TAG} not found"
   exit 1
 }
 echo "Gate 1 PASSED: Build & Zero-SDK Gate"
@@ -376,7 +387,7 @@ NORMALIZED_MATCH_COUNT="$(curl -fsS -X POST "http://localhost:9200/ss4o_logs-obs
           { "term": { "level": "WARN" } },
           { "term": { "env": "local" } },
           { "term": { "service": "observed-app" } },
-          { "term": { "version": "0.1.0" } },
+          { "term": { "version": "'"${IMAGE_TAG}"'" } },
           { "wildcard": { "logger": "com.observeit.*" } },
           { "match_phrase": { "message": "Payment declined" } }
         ]
@@ -434,5 +445,5 @@ echo "Gate 5 PASSED: OpenSearch Dashboards Saved Objects Gate"
 
 echo ""
 echo "========================================================================"
-echo " ALL 5 GATES PASSED! Milestone 1 Verification Suite Succeeded."
+echo " ALL GATES PASSED! End-to-End Verification Suite Succeeded."
 echo "========================================================================"

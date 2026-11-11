@@ -147,6 +147,11 @@ Observe-It configures the Paketo OpenTelemetry buildpack in its convention plugi
 ```kotlin
 tasks.named<BootBuildImage>("bootBuildImage") {
     imageName.set("observe-it/${project.name}:${project.version}")
+    tags.set(
+        listOf(
+            "ghcr.io/pawelbalcerek/observe-it/${project.name}:${project.version}"
+        )
+    )
     buildpacks.set(
         listOf(
             "urn:cnb:builder:paketo-buildpacks/java",
@@ -176,7 +181,7 @@ environment:
   - BPL_JVM_THREAD_COUNT=50
   - OTEL_JAVAAGENT_ENABLED=true
   - OTEL_SERVICE_NAME=observed-app
-  - OTEL_RESOURCE_ATTRIBUTES=service.version=0.1.0,deployment.environment.name=local
+  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.1.0},deployment.environment.name=local
   - OTEL_LOGS_EXPORTER=otlp
   - OTEL_TRACES_EXPORTER=none
   - OTEL_METRICS_EXPORTER=none
@@ -379,5 +384,24 @@ operations:
 - `make reset`: Tears down running containers and deletes all persistent volumes (`docker compose down -v`), resetting
   the OpenSearch data volume (`opensearch-data`) to a blank slate.
 - `make verify`: Executes automated end-to-end smoke verification
-  ([`scripts/verify-m1.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/scripts/verify-m1.sh)) to validate
+  ([`scripts/verify.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/scripts/verify.sh)) to validate
   container health, scenario execution, and OpenSearch log indexing without manual intervention.
+
+#### Dual-Mode Docker Compose Workflow
+
+Docker Compose supports variable parameterization for image coordinates and pull policies:
+
+- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.1.0}`
+- `pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}`
+- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.1.0},deployment.environment.name=local`
+
+This dual-mode design enables two core development workflows:
+
+1. **Pre-built GHCR images (Zero-build evaluation)**: Running `docker compose up -d` pulls multi-architecture
+   (`linux/amd64` and `linux/arm64`) OCI container images from GitHub Container Registry out of the box when no local
+   image exists (`pull_policy: missing`).
+2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.1.0`
+   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.1.0` into the local Docker daemon. Subsequent `docker compose up -d`
+   commands use the locally built images without network requests.
+3. **Strict offline / CI verification**: Passing `OBSERVE_IT_PULL_POLICY=never` ensures pull request and branch builds
+   strictly verify locally built container images and fail fast if images are missing.

@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  OBSERVE_IT_PULL_POLICY: never
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -37,7 +40,7 @@ jobs:
       - name: Start Docker Compose topology
         run: docker compose up -d
 
-      - name: Run Milestone 1 verification suite
+      - name: Run end-to-end verification suite
         run: make verify
 
       - name: Teardown Docker Compose topology
