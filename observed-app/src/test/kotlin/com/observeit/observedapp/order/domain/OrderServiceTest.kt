@@ -17,7 +17,9 @@ import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
 import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
 import com.observeit.observedapp.order.domain.ShippingMethod.STANDARD
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
+import com.observeit.observedapp.order.infrastructure.OtelOrderMetrics
 import com.observeit.observedapp.test.LogCapture
+import com.observeit.observedapp.test.MetricCapture
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -31,9 +33,14 @@ class OrderServiceTest {
     @RegisterExtension
     val logCapture = LogCapture(level = DEBUG)
 
+    @JvmField
+    @RegisterExtension
+    val metricCapture = MetricCapture.isolated()
+
     private val repository = InMemoryOrderRepository()
     private val paymentGateway = FakePaymentGateway()
-    private val service = OrderService(repository, paymentGateway)
+    private val orderMetrics = OtelOrderMetrics(metricCapture.openTelemetry, repository)
+    private val service = OrderService(repository, paymentGateway, orderMetrics)
 
     @Test
     fun `creates order, populates correlation, stores in repository, and emits structured log`() {
@@ -66,6 +73,19 @@ class OrderServiceTest {
                 "order.id" to order.id,
                 "customer.id" to "customerId",
             ),
+        )
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "orders.created",
+            unit = "{order}",
+            delta = 1L,
+            attributes = mapOf("order.currency" to "USD"),
+        )
+        metricCapture.assertGaugeValue(
+            name = "order.repository.size",
+            unit = "{order}",
+            value = 1L,
         )
     }
 
@@ -150,6 +170,26 @@ class OrderServiceTest {
                 "customer.id" to existingOrder.customerId,
             ),
         )
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "RESERVED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "sku",
+                "inventory.outcome" to "RESERVED",
+            ),
+        )
     }
 
     @Test
@@ -179,6 +219,26 @@ class OrderServiceTest {
             ),
         )
         logEvent.throwableProxy shouldBe null
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "RESERVED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "SKU-LOW-STOCK",
+                "inventory.outcome" to "LOW_STOCK_WARNING",
+            ),
+        )
     }
 
     @Test
@@ -201,6 +261,32 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, items = items, state = FAILED)
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "FAILED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "SKU-OUT-OF-STOCK",
+                "inventory.outcome" to "OUT_OF_STOCK",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "OUT_OF_STOCK"),
+        )
     }
 
     @Test
@@ -243,6 +329,27 @@ class OrderServiceTest {
                 "customer.id" to existingOrder.customerId,
             ),
         )
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "PAID",
+            ),
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 50.0,
+            attributes = mapOf(
+                "payment.method" to "CREDIT_CARD",
+                "payment.outcome" to "SUCCESS",
+            ),
+        )
     }
 
     @Test
@@ -260,6 +367,33 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, state = FAILED)
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "FAILED",
+            ),
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 50.0,
+            attributes = mapOf(
+                "payment.method" to "DECLINED_CARD",
+                "payment.outcome" to "DECLINED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "PAYMENT_DECLINED"),
+        )
     }
 
     @Test
@@ -280,6 +414,33 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, state = FAILED)
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "FAILED",
+            ),
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 1500.0,
+            attributes = mapOf(
+                "payment.method" to "TIMEOUT_GATEWAY",
+                "payment.outcome" to "TIMEOUT",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "GATEWAY_TIMEOUT"),
+        )
     }
 
     @Test
@@ -321,6 +482,17 @@ class OrderServiceTest {
                 "customer.id" to existingOrder.customerId,
             ),
         )
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "PAID",
+                "order.state" to "SHIPPED",
+            ),
+        )
     }
 
     @Test
@@ -351,6 +523,17 @@ class OrderServiceTest {
                 "customer.id" to existingOrder.customerId,
             ),
         )
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "CANCELLED",
+            ),
+        )
     }
 
     @Test
@@ -379,6 +562,17 @@ class OrderServiceTest {
             mdc = mapOf(
                 "order.id" to existingOrder.id,
                 "customer.id" to existingOrder.customerId,
+            ),
+        )
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "CANCELLED",
             ),
         )
     }
@@ -413,6 +607,14 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe existingOrder
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     @Test
@@ -434,6 +636,14 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe existingOrder
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     @Test
@@ -455,6 +665,14 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe existingOrder
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     @Test
@@ -476,6 +694,14 @@ class OrderServiceTest {
 
         // and
         repository.findById(existingOrder.id) shouldBe existingOrder
+
+        // and
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     @Test

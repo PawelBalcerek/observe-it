@@ -2,6 +2,7 @@ package com.observeit.observedapp.test
 
 import io.kotest.assertions.fail
 import io.kotest.matchers.shouldBe
+import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.metrics.Meter
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
@@ -25,11 +26,8 @@ import org.junit.jupiter.api.extension.ExtensionContext
 import java.util.concurrent.CopyOnWriteArrayList
 
 class MetricCapture(
-    private val metricReader: InMemoryMetricReader = InMemoryMetricReader.createDelta(),
-    meterProvider: SdkMeterProvider =
-        SdkMeterProvider.builder().registerMetricReader(metricReader).build(),
-    val openTelemetry: OpenTelemetrySdk =
-        OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build(),
+    private val metricReader: InMemoryMetricReader = sharedMetricReader,
+    val openTelemetry: OpenTelemetrySdk = sharedOpenTelemetry,
 ) : BeforeEachCallback,
     AfterEachCallback {
 
@@ -185,7 +183,29 @@ class MetricCapture(
         return matching.last()
     }
 
-    private companion object {
-        const val DEFAULT_INSTRUMENTATION_SCOPE = "observe-it"
+    companion object {
+        private const val DEFAULT_INSTRUMENTATION_SCOPE = "observe-it"
+
+        private val sharedMetricReader = InMemoryMetricReader.createDelta()
+        private val sharedMeterProvider: SdkMeterProvider =
+            SdkMeterProvider.builder().registerMetricReader(sharedMetricReader).build()
+        val sharedOpenTelemetry: OpenTelemetrySdk =
+            OpenTelemetrySdk.builder().setMeterProvider(sharedMeterProvider).build()
+
+        init {
+            try {
+                GlobalOpenTelemetry.resetForTest()
+                GlobalOpenTelemetry.set(sharedOpenTelemetry)
+            } catch (_: Exception) {
+                // Ignore if already set
+            }
+        }
+
+        fun isolated(): MetricCapture {
+            val reader = InMemoryMetricReader.createDelta()
+            val provider = SdkMeterProvider.builder().registerMetricReader(reader).build()
+            val sdk = OpenTelemetrySdk.builder().setMeterProvider(provider).build()
+            return MetricCapture(reader, sdk)
+        }
     }
 }
