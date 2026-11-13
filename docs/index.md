@@ -4,7 +4,7 @@ Observe-It is an open-source observability reference system and local sandbox fo
 applications using OpenTelemetry and OpenSearch. Rather than a toy "hello world" or a tutorial that duplicates vendor
 documentation, it pairs a realistic multi-service system—an **Observed App** processing customer **Order** workflows and
 a continuous **Traffic Generator** driving normal, warning, and failure **Checkout Scenario** paths across every **Order
-State**—with zero-code OpenTelemetry instrumentation and an **SS4O Log Index** in OpenSearch.
+State**—with OpenTelemetry instrumentation and both an **SS4O Log Index** and an **SS4O Metrics Index** in OpenSearch.
 
 ## System at a Glance
 
@@ -13,8 +13,8 @@ flowchart LR
   TG["Traffic Generator (:8081)"] -->|"HTTP REST + X-Checkout-Scenario"| OA["Observed App (:8080)"]
   TG -.->|"OTLP gRPC (Java Agent)"| OC["OpenTelemetry Collector (:4317)"]
   OA -.->|"OTLP gRPC (Java Agent)"| OC
-  OC -->|"SS4O Log Index (observe-it-logs-pipeline)"| OS["OpenSearch (:9200)"]
-  OSD["OpenSearch Dashboards (:5601)"] -->|"Discover & DQL"| OS
+  OC -->|"SS4O Logs & Metrics Pipelines"| OS["OpenSearch (:9200)"]
+  OSD["OpenSearch Dashboards (:5601)"] -->|"Discover & Dashboards"| OS
 ```
 
 ## Quick Start
@@ -34,11 +34,11 @@ Or run the underlying Gradle and Docker Compose commands directly:
 docker compose up -d
 ```
 
-Once all containers are healthy, open OpenSearch Dashboards at `http://localhost:5601`, navigate to **Discover**, and
-open any of the 4 pre-bootstrapped saved searches (`All Order Logs`, `Warnings & Business Rejections`, `Gateway Timeouts
-& Stack Traces`, or `Checkout Scenario Explorer`) to inspect live structured logs in the `ss4o_logs-*` **SS4O Log
-Index**. For a step-by-step walkthrough on triggering scenarios and exploring telemetry, follow the [Checkout Scenarios
-& Dashboards Walkthrough](./guides/exploring-telemetry.md).
+Once all containers are healthy, open OpenSearch Dashboards at `http://localhost:5601`, navigate to **Discover** to
+inspect live structured logs in `ss4o_logs-*` (`All Order Logs`, `Warnings & Business Rejections`, `Gateway Timeouts &
+Stack Traces`, `Checkout Scenario Explorer`) and metrics in `ss4o_metrics-*` (`All Metrics`, `Domain Order Metrics`), or
+open **Dashboards** → `Observe-It Metrics Overview`. For a step-by-step walkthrough on triggering scenarios and
+exploring telemetry, follow the [Checkout Scenarios & Dashboards Walkthrough](./guides/exploring-telemetry.md).
 
 To stop the stack and remove volumes:
 
@@ -56,6 +56,9 @@ Explore living narrative and operational guides in the [Guides Overview](./guide
   OpenTelemetry Java Agent buildpack, OpenTelemetry Collector pipeline, and OpenSearch bootstrap.
 - [Structured Logging in Kotlin & Spring Boot](./guides/structured-logging.md) — SLF4J 2 fluent key-value logging,
   scoped MDC correlation, Logback OTLP bridge, SS4O document normalization, and in-memory unit testing.
+- [Metrics & OpenSearch Dashboards in Kotlin & Spring Boot](./guides/metrics-and-dashboards.md) — Auto-instrumented
+  JVM/HTTP metrics vs. domain metric ports, cardinality boundaries, DELTA temporality, SS4O metrics normalization, and
+  `MetricCapture` tests.
 - [Checkout Scenarios & Dashboards Walkthrough](./guides/exploring-telemetry.md) — Seven Checkout Scenario paths,
   interactive Traffic Generator REST API, and OpenSearch Dashboards / DQL investigation workflows.
 
@@ -66,11 +69,11 @@ trade-offs, and consequences. See the [ADR Index](./adr/index.md) for more.
 
 ## Observability Pillars & Roadmap
 
-| Milestone       | Pillar               | Status  | Scope & Capabilities                                                                                                                                                                                                                                                                                                |
-| :-------------- | :------------------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Milestone 1** | Structured Logging   | Current | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation (`checkout.scenario`, `order.id`, `customer.id`), zero-code OpenTelemetry Java Agent log bridge, OpenTelemetry Collector `ss4o` export, OpenSearch `observe-it-logs-pipeline` normalization, and pre-bootstrapped OpenSearch Dashboards saved searches. |
-| **Milestone 2** | Metrics & Dashboards | Planned | JVM, HTTP, and domain metrics (**Order** throughput, payment latency histograms, error rates) exported via OTLP and visualized in OpenSearch Dashboards.                                                                                                                                                            |
-| **Milestone 3** | Distributed Tracing  | Planned | End-to-end W3C Trace Context propagation across the **Traffic Generator** and **Observed App**, custom domain spans, and cross-signal trace-to-log correlation.                                                                                                                                                     |
+| Milestone       | Pillar               | Status   | Scope & Capabilities                                                                                                                                                                                                                                                                                                |
+| :-------------- | :------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Milestone 1** | Structured Logging   | Complete | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation (`checkout.scenario`, `order.id`, `customer.id`), zero-code OpenTelemetry Java Agent log bridge, OpenTelemetry Collector `ss4o` export, OpenSearch `observe-it-logs-pipeline` normalization, and pre-bootstrapped OpenSearch Dashboards saved searches. |
+| **Milestone 2** | Metrics & Dashboards | Current  | Auto-instrumented JVM/HTTP metrics, pure `domain` metric ports (`OrderMetrics`, `TrafficMetrics`) over `opentelemetry-api`, 1-second `DELTA` OTLP export, `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics`, `MetricCapture` in-memory tests, and the `Observe-It Metrics Overview` dashboard.            |
+| **Milestone 3** | Distributed Tracing  | Planned  | End-to-end W3C Trace Context propagation across the **Traffic Generator** and **Observed App**, custom domain spans, and cross-signal trace-to-log correlation.                                                                                                                                                     |
 
 ## Official Upstream References
 

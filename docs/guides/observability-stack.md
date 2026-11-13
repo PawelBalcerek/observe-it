@@ -39,11 +39,12 @@ Observe-It implements this decoupled pipeline locally using five continuous runt
 bootstrap container declared in
 [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml):
 
-- `opensearch`: Distributed search and analytics datastore holding the **SS4O Log Index** (`:9200`).
-- `opensearch-dashboards`: Browser-based interface for log exploration, visualization, and DQL query execution
-  (`:5601`).
-- `opensearch-bootstrap`: Transient initialization container that installs the OpenSearch ingest pipeline, index
-  template, and pre-built saved searches before exiting cleanly.
+- `opensearch`: Distributed search and analytics datastore holding the **SS4O Log Index** and **SS4O Metrics Index**
+  (`:9200`).
+- `opensearch-dashboards`: Browser-based interface for log and metric exploration, dashboard visualization, and DQL
+  query execution (`:5601`).
+- `opensearch-bootstrap`: Transient initialization container that installs the OpenSearch ingest pipelines, index
+  templates, and pre-built saved searches and dashboards before exiting cleanly.
 - `otel-collector`: OpenTelemetry Collector Contrib container receiving OTLP over gRPC (`:4317`) and HTTP (`:4318`),
   protecting memory limits, batching records, and exporting to OpenSearch.
 - `observed-app`: Kotlin/Spring Boot backend service (`:8080`) handling customer **Order** processing with zero-code
@@ -174,7 +175,7 @@ instrumentation agent out of the application runtime classpath. The verification
 `io.opentelemetry:opentelemetry-api` (and its transitive context) with zero SDK or instrumentation artifacts.
 
 At runtime, [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) activates
-the agent and configures the Logback OTLP bridge via environment variables:
+the agent and configures the Logback OTLP bridge and 1-second `DELTA` metrics export via environment variables:
 
 ```yaml
 environment:
@@ -184,7 +185,9 @@ environment:
   - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local
   - OTEL_LOGS_EXPORTER=otlp
   - OTEL_TRACES_EXPORTER=none
-  - OTEL_METRICS_EXPORTER=none
+  - OTEL_METRICS_EXPORTER=otlp
+  - OTEL_METRIC_EXPORT_INTERVAL=1000
+  - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
   - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
   - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
   - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES=*
@@ -281,19 +284,23 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [opensearch]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [opensearch]
 ```
 
 The pipeline operates with specific safeguards:
 
-- **Receiver ingress**: Receives OTLP log streams over high-performance gRPC (`:4317`) from the application Java
-  Agents and exposes HTTP (`:4318`) for standard web hooks.
+- **Receiver ingress**: Receives OTLP log and metric streams over high-performance gRPC (`:4317`) from the application
+  Java Agents and exposes HTTP (`:4318`) for standard web hooks.
 - **Memory protection**: `limit_mib: 200` and `spike_limit_mib: 50` ensure the collector process never breaches its
   256 MB Docker container memory limit (`mem_limit: 256m`).
 - **Batching efficiency**: Aggregates records into chunks of 100 entries or flushes every 1 second, reducing HTTP
   connection overhead against OpenSearch.
 - **SS4O mapping & retries**: Uses `mapping.mode: ss4o` with dataset `observe-it` and namespace `local`, routing log
-  records directly to the index `ss4o_logs-observe-it-local`. Persistent queues and backoff retries safeguard log
-  delivery during transient storage load.
+  records to `ss4o_logs-observe-it-local` and metric points to `ss4o_metrics-observe-it-local`. Persistent queues and
+  backoff retries safeguard delivery during transient storage load.
 
 For in-depth analysis of collector export modes and rejected OTTL transform alternatives, see
 [ADR-0002: Direct OpenTelemetry Collector ss4o Export and OpenSearch Ingest Pipeline](../adr/0002-otel-collector-ss4o-and-opensearch-ingest-pipeline.md).
@@ -328,42 +335,37 @@ produce clean documents for exploration, search backends pair target schema conv
 
 ### In Observe-It
 
-Observe-It coordinates storage provisioning through four configuration files in
+Observe-It coordinates storage provisioning through six configuration files in
 [`docker/opensearch/`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/):
 
 1. **Bootstrap orchestrator** ([`docker/opensearch/bootstrap.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/bootstrap.sh)):
    A one-shot Bash script executed by the `opensearch-bootstrap` container. It verifies cluster availability, installs
-   the ingest pipeline and index template, waits for `opensearch-dashboards` HTTP availability, imports pre-built saved
-   objects, and sets `ss4o_logs` as the default index pattern.
-2. **Ingest pipeline** ([`docker/opensearch/ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/ingest-pipeline.json)):
+   the log and metrics ingest pipelines (`observe-it-logs-pipeline`, `observe-it-metrics-pipeline`) and index templates
+   (`observe-it-ss4o-logs`, `observe-it-ss4o-metrics`), waits for `opensearch-dashboards` HTTP availability, imports
+   pre-built saved objects, and sets `ss4o_logs` as the default index pattern.
+2. **Log ingest pipeline** ([`docker/opensearch/ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/ingest-pipeline.json)):
    A Painless script processor registered as `observe-it-logs-pipeline` that promotes top-level fields (`body` →
    `message`, `severity.text` → `level`, `instrumentationScope.name` → `logger`, `resource['service.name']` → `service`,
    `resource['service.version']` → `version`, `resource['deployment.environment.name']` → `env`,
-   `attributes['exception.stacktrace']` → `exception`) and removes duplicate nested attributes:
-
-   ```json
-   {
-     "description": "Observe-it log deduplication, field normalization, and alias pipeline",
-     "processors": [
-       {
-         "script": {
-           "description": "Extract clean fields (message, level, logger, env, service, version, exception) and remove duplicates",
-           "source": "if (ctx.body != null) { ctx.message = ctx.remove('body'); } if (ctx.severity != null && ctx.severity.text != null) { ctx.level = ctx.severity.text; ctx.remove('severity'); } if (ctx.instrumentationScope != null) { ctx.logger = ctx.instrumentationScope.name; ctx.remove('instrumentationScope'); } if (ctx.resource != null) { if (ctx.resource['service.name'] != null) { ctx.service = ctx.resource.remove('service.name'); } if (ctx.resource['service.version'] != null) { ctx.version = ctx.resource.remove('service.version'); } if (ctx.resource['deployment.environment.name'] != null) { ctx.env = ctx.resource['deployment.environment.name']; } } if (ctx.attributes != null) { ctx.attributes.remove('data_stream'); if (ctx.attributes['exception.stacktrace'] != null) { ctx.exception = ctx.attributes.remove('exception.stacktrace'); } ctx.attributes.remove('exception.message'); ctx.attributes.remove('exception.type'); }"
-         }
-       }
-     ]
-   }
-   ```
-
-3. **Index template** ([`docker/opensearch/index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/index-template.json)):
+   `attributes['exception.stacktrace']` → `exception`) and removes duplicate nested attributes.
+3. **Log index template** ([`docker/opensearch/index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/index-template.json)):
    An index template registered as `observe-it-ss4o-logs` matching pattern `ss4o_logs-*` with priority 200. It attaches
-   the `observe-it-logs-pipeline` as the `default_pipeline`, applies the `strings_as_keywords` dynamic template, and
+   `observe-it-logs-pipeline` as the `default_pipeline`, applies the `strings_as_keywords` dynamic template, and
    enforces explicit property mappings for top-level keys (`message`, `level`, `service`, `logger`, `exception`,
    `traceId`, `spanId`) and typed domain keys under `attributes.order.*`, `attributes.customer.*`,
    `attributes.checkout.*`, `attributes.inventory.*`, and `attributes.payment.*`.
-4. **Pre-configured dashboards** ([`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson)):
-   Imports the `ss4o_logs` index pattern and four ready-to-use Discover saved searches: `All Order Logs`,
-   `Warnings & Business Rejections`, `Gateway Timeouts & Stack Traces`, and `Checkout Scenario Explorer`.
+4. **Metrics ingest pipeline & index template**
+   ([`metrics-ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/metrics-ingest-pipeline.json)
+   and
+   [`metrics-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/metrics-index-template.json)):
+   Registers `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics` (`ss4o_metrics-*`, priority 200) to promote
+   `service`, `version`, and `env`, unify `value@int` / `value@double` into `value`, and map `value@int` as 64-bit
+   `long` (see [ADR-0007](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md)).
+5. **Pre-configured dashboards & saved searches** ([`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson)):
+   Imports both `ss4o_logs-*` and `ss4o_metrics-*` index patterns, four log saved searches (`All Order Logs`,
+   `Warnings & Business Rejections`, `Gateway Timeouts & Stack Traces`, `Checkout Scenario Explorer`), two metric saved
+   searches (`All Metrics`, `Domain Order Metrics`), nine visualizations, and the `Observe-It Metrics Overview`
+   dashboard.
 
 ## Stack Lifecycle Commands
 
@@ -385,7 +387,8 @@ operations:
   the OpenSearch data volume (`opensearch-data`) to a blank slate.
 - `make verify`: Executes automated end-to-end smoke verification
   ([`scripts/verify.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/scripts/verify.sh)) to validate
-  container health, scenario execution, and OpenSearch log indexing without manual intervention.
+  API-only OpenTelemetry runtime classpaths, container health, scenario execution, and OpenSearch log and metric
+  indexing without manual intervention.
 
 #### Dual-Mode Docker Compose Workflow
 

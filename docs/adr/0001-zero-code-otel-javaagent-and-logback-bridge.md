@@ -2,6 +2,13 @@
 
 **Status:** Accepted
 
+> [!NOTE]
+> Milestone 2 introduces a compile-time `io.opentelemetry:opentelemetry-api` dependency behind pure `domain` metric
+> ports (`OrderMetrics`, `TrafficMetrics`) while keeping the OpenTelemetry SDK and instrumentation out of the application
+> runtime classpath. See
+> [ADR-0006: OpenTelemetry API Domain Metrics Port Boundary and In-Memory Testing](0006-otel-api-domain-metrics-port-and-in-memory-testing.md)
+> for the updated dependency boundary and verification gate.
+
 ## Context
 
 Both the **Observed App** and **Traffic Generator** must emit rich structured logs—including SLF4J 2 key-value pairs,

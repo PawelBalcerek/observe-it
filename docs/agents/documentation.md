@@ -12,6 +12,7 @@ docs/
 ├── guides/                  ← Living narrative and operational guides
 │   ├── observability-stack.md
 │   ├── structured-logging.md
+│   ├── metrics-and-dashboards.md
 │   └── exploring-telemetry.md
 ├── adr/                     ← Append-only Architecture Decision Records
 │   ├── index.md
@@ -143,8 +144,8 @@ line or `## Context` section.
 - **Upstream vendor documentation**: Link directly to official OpenTelemetry, OpenSearch, SS4O, and SLF4J documentation
   for vendor fundamentals.
 - **Domain glossary (`CONTEXT.md`) adherence**: Use the canonical terms defined in `CONTEXT.md` (**Observed App**,
-  **Traffic Generator**, **Order**, **Order State**, **Order Line Item**, **Checkout Scenario**, **SS4O Log Index**) and
-  avoid the listed _Avoid_ synonyms.
+  **Traffic Generator**, **Order**, **Order State**, **Order Line Item**, **Checkout Scenario**, **SS4O Log Index**,
+  **SS4O Metrics Index**) and avoid the listed _Avoid_ synonyms.
 
 ## 5. Verification (`make docs-build`)
 
