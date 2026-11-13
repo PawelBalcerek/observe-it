@@ -1,0 +1,221 @@
+{
+  "index_patterns": ["ss4o_metrics-*"],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "default_pipeline": "observe-it-metrics-pipeline"
+      }
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings_as_keywords": {
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date_nanos" },
+        "startTime": { "type": "date_nanos" },
+        "observedTimestamp": { "type": "date_nanos" },
+        "service": { "type": "keyword" },
+        "serviceName": { "type": "keyword" },
+        "version": { "type": "keyword" },
+        "env": { "type": "keyword" },
+        "name": { "type": "keyword" },
+        "description": { "type": "keyword", "ignore_above": 1024 },
+        "unit": { "type": "keyword" },
+        "kind": { "type": "keyword" },
+        "aggregationTemporality": { "type": "keyword" },
+        "monotonic": { "type": "boolean" },
+        "value": { "type": "double" },
+        "value@int": { "type": "long" },
+        "value@double": { "type": "double" },
+        "count": { "type": "long" },
+        "sum": { "type": "double" },
+        "min": { "type": "double" },
+        "max": { "type": "double" },
+        "explicitBoundsList": { "type": "double" },
+        "bucketCountsList": { "type": "long" },
+        "bucketCount": { "type": "long" },
+        "explicitBoundsCount": { "type": "long" },
+        "buckets": {
+          "type": "nested",
+          "properties": {
+            "count": { "type": "long" },
+            "min": { "type": "double" },
+            "max": { "type": "double" }
+          }
+        },
+        "positiveBuckets": {
+          "type": "nested",
+          "properties": {
+            "count": { "type": "long" },
+            "min": { "type": "double" },
+            "max": { "type": "double" }
+          }
+        },
+        "negativeBuckets": {
+          "type": "nested",
+          "properties": {
+            "count": { "type": "long" },
+            "min": { "type": "double" },
+            "max": { "type": "double" }
+          }
+        },
+        "resource": {
+          "properties": {
+            "service": {
+              "properties": {
+                "name": { "type": "keyword" },
+                "version": { "type": "keyword" },
+                "instance": {
+                  "properties": {
+                    "id": { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "deployment": {
+              "properties": {
+                "environment": {
+                  "properties": {
+                    "name": { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "telemetry": {
+              "properties": {
+                "sdk": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "language": { "type": "keyword" },
+                    "version": { "type": "keyword" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "instrumentationScope": {
+          "properties": {
+            "name": { "type": "keyword" },
+            "version": { "type": "keyword" }
+          }
+        },
+        "attributes": {
+          "properties": {
+            "order": {
+              "properties": {
+                "state": { "type": "keyword" },
+                "previous_state": { "type": "keyword" },
+                "currency": { "type": "keyword" }
+              }
+            },
+            "error": {
+              "properties": {
+                "type": { "type": "keyword" }
+              }
+            },
+            "inventory": {
+              "properties": {
+                "sku": { "type": "keyword" },
+                "outcome": { "type": "keyword" }
+              }
+            },
+            "payment": {
+              "properties": {
+                "method": { "type": "keyword" },
+                "outcome": { "type": "keyword" }
+              }
+            },
+            "checkout": {
+              "properties": {
+                "scenario": { "type": "keyword" }
+              }
+            },
+            "http": {
+              "properties": {
+                "request": {
+                  "properties": {
+                    "method": { "type": "keyword" }
+                  }
+                },
+                "response": {
+                  "properties": {
+                    "status_code": { "type": "long" }
+                  }
+                },
+                "route": { "type": "keyword" }
+              }
+            },
+            "url": {
+              "properties": {
+                "scheme": { "type": "keyword" }
+              }
+            },
+            "server": {
+              "properties": {
+                "address": { "type": "keyword" },
+                "port": { "type": "long" }
+              }
+            },
+            "network": {
+              "properties": {
+                "protocol": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "version": { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "jvm": {
+              "properties": {
+                "memory": {
+                  "properties": {
+                    "type": { "type": "keyword" },
+                    "pool": {
+                      "properties": {
+                        "name": { "type": "keyword" }
+                      }
+                    }
+                  }
+                },
+                "gc": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "action": { "type": "keyword" }
+                  }
+                },
+                "thread": {
+                  "properties": {
+                    "daemon": { "type": "boolean" },
+                    "state": { "type": "keyword" }
+                  }
+                },
+                "cpu": {
+                  "properties": {
+                    "context_switch": {
+                      "properties": {
+                        "type": { "type": "keyword" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
