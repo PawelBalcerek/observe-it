@@ -46,9 +46,13 @@ jobs:
         working-directory: docs
         run: npm ci
 
-      - name: Lint Markdown and Mermaid syntax
+      - name: Lint Markdown, Mermaid, and ADRs
         working-directory: docs
         run: npm run lint
+
+      - name: Run docs script tests
+        working-directory: docs
+        run: npm test
 
       - name: Build VitePress site
         working-directory: docs

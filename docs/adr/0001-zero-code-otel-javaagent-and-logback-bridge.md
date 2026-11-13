@@ -59,18 +59,21 @@ bridge:
    `stdout` couples telemetry transport to console formatting, renders `docker compose logs` unreadable for humans
    debugging in the terminal, and requires fragile downstream parsing to reassemble multiline stack traces.
 2. **Compile-time `opentelemetry-logback-appender-1.0` / Spring Boot OpenTelemetry starter**:
-   Adding compile-time OpenTelemetry starters or appenders directly to application dependencies was rejected for
-   Milestone 1. Zero-code bytecode instrumentation proves that standard SLF4J 2 APIs alone suffice to produce complete
-   OTLP structured log records without coupling application build files to OpenTelemetry SDK lifecycles. (When custom
-   domain metrics or trace spans are introduced in future milestones, a future ADR will evaluate adding
-   `opentelemetry-api` where needed.)
+   Adding compile-time OpenTelemetry starters or appenders directly to application dependencies was deferred for
+   Milestone 1 rather than permanently ruled out. Zero-code bytecode instrumentation proves that standard SLF4J 2 APIs
+   alone suffice to produce complete OTLP structured log records without coupling application build files to
+   OpenTelemetry SDK lifecycles. (Evaluating `opentelemetry-api` for custom domain metrics was later revisited in
+   [ADR-0006](0006-otel-api-domain-metrics-port-and-in-memory-testing.md).)
 
 ## Consequences
 
-- **Positive**: Clean architectural separation between business code (pure SLF4J 2) and telemetry export; simultaneous
-  human-readable terminal logs on `stdout` and lossless OTLP/gRPC structured telemetry sent to the Collector; uniform
-  agent provisioning across both services via a single Gradle convention plugin.
-- **Trade-offs / Constraints**: Relies on `OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_*` environment variables
-  governed by the upstream OpenTelemetry Java Agent; container health check commands must explicitly include
-  `-Dotel.javaagent.enabled=false` because the Paketo buildpack injects agent flags for all container JVM processes by
-  default.
+- **Good, because** business code stays decoupled from vendor SDKs (pure SLF4J 2) while emitting lossless OTLP/gRPC
+  structured telemetry to the Collector.
+- **Good, because** local terminal logs on `stdout` remain human-readable alongside structured OTLP log export.
+- **Good, because** a single Gradle convention plugin provisions the Java Agent uniformly across both services.
+- **Bad, because** Logback attribute capture relies on `OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_*`
+  environment variables governed by the upstream OpenTelemetry Java Agent.
+- **Bad, because** container health check commands must explicitly pass `-Dotel.javaagent.enabled=false` because the
+  Paketo buildpack injects agent flags for all container JVM processes by default.
+- **Neutral, because** Milestone 2 builds on this agent setup by adding `opentelemetry-api` behind domain metric ports
+  while keeping the SDK and instrumentation out of the runtime classpath ([ADR-0006](0006-otel-api-domain-metrics-port-and-in-memory-testing.md)).

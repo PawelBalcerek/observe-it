@@ -21,11 +21,11 @@ distinguishes the core patterns that matter from supporting scaffolding and link
 
 ```mermaid
 flowchart LR
-  TG["Traffic Generator (:8081)"] --> OA["Observed App (:8080)"]
-  OA --> OJA["OpenTelemetry Java Agent (OTLP gRPC)"]
-  OJA --> OC["OpenTelemetry Collector (:4317)"]
-  OC --> OS["OpenSearch (:9200, SS4O Logs & Metrics Pipelines)"]
-  OSD["OpenSearch Dashboards (:5601)"] --> OS
+  TG["Traffic Generator (:8081)"] -->|"HTTP REST + X-Checkout-Scenario"| OA["Observed App (:8080)"]
+  TG -.->|"OTLP gRPC (Java Agent)"| OC["OpenTelemetry Collector (:4317)"]
+  OA -.->|"OTLP gRPC (Java Agent)"| OC
+  OC -->|"SS4O Logs & Metrics Pipelines"| OS["OpenSearch (:9200)"]
+  OSD["OpenSearch Dashboards (:5601)"] -->|"Discover & Dashboards"| OS
 ```
 
 ## 5-Minute Quick Start
@@ -157,7 +157,7 @@ fundamentals to authoritative upstream manuals:
 - [OpenTelemetry Collector Documentation](https://opentelemetry.io/docs/collector/) — Receivers, processors
   (`memory_limiter`, `batch`), and exporters.
 - [Simple Schema for Observability (SS4O)](https://docs.opensearch.org/latest/observing-your-data/ss4o/) — OpenSearch
-  schema conventions for `ss4o_logs-*` indices.
+  schema conventions for `ss4o_logs-*` and `ss4o_metrics-*` indices.
 - [OpenSearch Dashboards Query Language (DQL)](https://docs.opensearch.org/latest/dashboards/dql/) — Filtering and
   querying structured fields in Discover.
 - [SLF4J 2 Fluent Logging API](https://www.slf4j.org/manual.html#fluent) — Structured `.atInfo().addKeyValue(...)`

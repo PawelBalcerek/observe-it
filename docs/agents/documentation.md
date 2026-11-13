@@ -61,7 +61,13 @@ and **Result of a real trade-off**):
   changes can supersede individual decisions cleanly without invalidating unrelated choices.
 - **Immutable once accepted**: Keep accepted ADR bodies intact when a decision changes. Reversing or replacing a
   decision creates a new ADR (`docs/adr/MMMM-*.md`) and updates the prior ADR's status header and superseding banner.
-- **Active ADR template (`Accepted`)**:
+- **Active ADR template (`Accepted`, MADR-style)**: Include all four H2 sections in order (`## Context`, `## Decision`,
+  `## Considered Options`, `## Consequences`), enforced by `docs/scripts/lint-adr.mjs` during `make docs-build`:
+  - In `## Considered Options`, explicitly state for each option whether it was **rejected** (ruled out due to a
+    fundamental architectural or ergonomic mismatch) or **deferred** / **postponed** (not chosen for the current
+    milestone scope, open to a future ADR).
+  - In `## Consequences`, use an unordered list of `- **Good, because** ...`, `- **Bad, because** ...`, and
+    `- **Neutral, because** ...` items with at least one `Good, because` and one `Bad, because` entry.
 
 ```markdown
 # NNNN. Short Decision Title
@@ -76,12 +82,21 @@ What forces, constraints, and problem prompted this decision.
 
 What we decided and how it works in Observe-It.
 
+## Considered Options
+
+1. **Alternative A**:
+   Alternative A was rejected because ...
+2. **Alternative B**:
+   Alternative B was deferred for Milestone X because ...
+
 ## Consequences
 
-Trade-offs, operational impact, and what this enables or constrains.
+- **Good, because** ...
+- **Bad, because** ...
+- **Neutral, because** ...
 ```
 
-Include an optional `## Considered Options` section only when rejected alternatives are non-obvious and worth recording.
+Register every new ADR in both `docs/adr/index.md` and `docs/.vitepress/config.mts`.
 
 - **Superseded ADR format**: Update the `**Status:**` line, insert a `> [!WARNING]` GFM alert immediately below it
   linking forward to the superseding ADR, and update the `Status` column in `docs/adr/index.md`:
@@ -150,7 +165,7 @@ line or `## Context` section.
 ## 5. Verification (`make docs-build`)
 
 Before committing changes to any `.md` file, docs configuration, or documentation tooling, run `make docs-build` (or
-`make -C docs build`, or `make docs-lint` for lint-only checks) to execute `markdownlint-cli2` and `mermaid.parse()`
-syntax validation (`docs/scripts/lint-mermaid.mjs`) across all repository Markdown files and `vitepress build` with
-strict dead-link checking. When changes touch only documentation or Markdown, `make docs-build` is the primary
-verification gate (without running `./gradlew check`).
+`make -C docs build`, or `make docs-lint` for lint-only checks) to execute `markdownlint-cli2`, `mermaid.parse()` syntax
+validation (`docs/scripts/lint-mermaid.mjs`), MADR ADR validation (`docs/scripts/lint-adr.mjs`), `npm test`
+(`docs/scripts/*.test.mjs`), and `vitepress build` with strict dead-link checking. When changes touch only documentation
+or Markdown, `make docs-build` is the primary verification gate (without running `./gradlew check`).

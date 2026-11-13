@@ -50,6 +50,18 @@ and index template for `ss4o_metrics-*`:
    [`docker/opensearch/bootstrap.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/bootstrap.sh)
    registers both the pipeline and index template before `otel-collector` starts.
 
+## Considered Options
+
+1. **Default `CUMULATIVE` temporality**:
+   Exporting counters and histograms with OpenTelemetry's default `CUMULATIVE` temporality was rejected because querying
+   cumulative counters in OpenSearch Dashboards time-bucket bar charts requires computing per-bucket derivatives and
+   handling counter resets across container restarts.
+2. **Relying on OpenSearch dynamic mapping without a custom template or ingest pipeline**:
+   Indexing raw Collector `ss4o` metric documents with dynamic mapping was rejected because OpenSearch can infer
+   `value@int` as a 32-bit `integer` (overflowing on large JVM memory byte gauges), leaves values split across
+   `value@int` and `value@double`, and keeps service metadata nested under `resource.*` instead of top-level `service`,
+   `version`, and `env` fields.
+
 ## Consequences
 
 - **Good, because** counter and histogram intervals aggregate cleanly with simple `sum`, `avg`, and `max` bucket

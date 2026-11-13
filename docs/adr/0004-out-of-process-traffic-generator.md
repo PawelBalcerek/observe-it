@@ -47,14 +47,27 @@ HTTP:
    `/api/traffic/pause`, `/api/traffic/resume`, `/api/traffic/rate`, and `/api/traffic/status`), allowing developers to
    control traffic dynamically without restarting containers.
 
+## Considered Options
+
+1. **In-process `@Scheduled` workload loop inside the Observed App**:
+   Generating synthetic traffic from a scheduled bean inside the **Observed App** was rejected because it bypasses the
+   HTTP servlet filter chain (`MdcCorrelationFilter`, `OrderMdcInterceptor`, `OrderControllerAdvice`), entangles
+   synthetic load generation with core domain logic, and prevents demonstrating cross-service telemetry correlation.
+2. **External load-testing engine (k6 or Gatling)**:
+   Using a standalone load-testing script was deferred for Milestone 1 because it would not share the repository's
+   Kotlin/Spring Boot build, Paketo Java Agent provisioning, or structured OTLP telemetry correlation. Because the
+   **Traffic Generator** interacts with the **Observed App** solely over its public REST API, dedicated load-testing
+   engines can still be introduced alongside or in place of it in a future ADR if high-throughput stress testing is
+   needed.
+
 ## Consequences
 
-- **Positive**: Emits authentic client-to-server HTTP traffic and multi-service telemetry (`service: traffic-generator`
-  and `service: observed-app` correlated by `order.id`, `customer.id`, and `checkout.scenario` in the
-  **SS4O Log Index**); reuses Gradle convention plugins, testing fixtures, and OpenTelemetry Java Agent provisioning
-  across both services; establishes a clean foundation for Milestone 3 distributed trace propagation across process
-  boundaries.
-- **Trade-offs & Future Evolution**: Requires running a second Spring Boot JVM container (`mem_limit: 512m` in
-  `docker-compose.yml`) alongside the **Observed App**. Because the **Traffic Generator** interacts with the
-  **Observed App** solely over its public REST API, dedicated load-testing engines (such as k6 or Gatling) can be
-  introduced alongside or in place of it in a future ADR if high-throughput stress testing becomes necessary.
+- **Good, because** authentic client-to-server HTTP traffic produces multi-service telemetry (`service: traffic-generator`
+  and `service: observed-app`) correlated by `order.id`, `customer.id`, and `checkout.scenario` in the **SS4O Log
+  Index**.
+- **Good, because** both services reuse the same Gradle convention plugins, testing fixtures, and OpenTelemetry Java
+  Agent provisioning, and establish a foundation for Milestone 3 distributed trace propagation.
+- **Bad, because** local development requires running a second Spring Boot JVM container (`mem_limit: 512m` in
+  `docker-compose.yml`) alongside the **Observed App**.
+- **Neutral, because** the **Traffic Generator** depends only on the **Observed App** HTTP API, keeping the door open
+  for external load-testing tools later.
