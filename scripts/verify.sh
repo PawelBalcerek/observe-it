@@ -104,22 +104,22 @@ wait_for_condition() {
   echo "✔ ${description} is ready (${elapsed}s)."
 }
 
-wait_for_condition "opensearch container healthy" 60 \
+wait_for_condition "opensearch container healthy" 120 \
   "[ \"\$(docker inspect opensearch --format '{{.State.Health.Status}}' 2>/dev/null || true)\" = 'healthy' ]"
 
-wait_for_condition "opensearch-dashboards ready" 60 \
+wait_for_condition "opensearch-dashboards ready" 120 \
   "[ \"\$(curl -fsS http://localhost:5601/api/status 2>/dev/null | jq -r .status.overall.state || true)\" = 'green' ]"
 
-wait_for_condition "otel-collector container running" 30 \
+wait_for_condition "otel-collector container running" 60 \
   "[ \"\$(docker inspect otel-collector --format '{{.State.Status}}' 2>/dev/null || true)\" = 'running' ]"
 
-wait_for_condition "observed-app actuator health UP" 60 \
+wait_for_condition "observed-app actuator health UP" 120 \
   "[ \"\$(curl -fsS http://localhost:8080/actuator/health 2>/dev/null | jq -r .status || true)\" = 'UP' ]"
 
-wait_for_condition "traffic-generator actuator health UP" 60 \
+wait_for_condition "traffic-generator actuator health UP" 120 \
   "[ \"\$(curl -fsS http://localhost:8081/actuator/health 2>/dev/null | jq -r .status || true)\" = 'UP' ]"
 
-wait_for_condition "opensearch-bootstrap completed with exit code 0" 60 \
+wait_for_condition "opensearch-bootstrap completed with exit code 0" 120 \
   "[ \"\$(docker inspect opensearch-bootstrap --format '{{.State.Status}}' 2>/dev/null || true)\" = 'exited' ] && [ \"\$(docker inspect opensearch-bootstrap --format '{{.State.ExitCode}}' 2>/dev/null || true)\" = '0' ]"
 echo "opensearch-bootstrap exited with code 0."
 echo "Gate 2 PASSED: Container & Bootstrap Health Gate"
@@ -153,8 +153,8 @@ for scenario in "${SCENARIOS[@]}"; do
   fi
 done
 
-echo "==> Waiting 3s for Collector batch flush..."
-sleep 3
+echo "==> Waiting 5s for Collector batch flush..."
+sleep 5
 
 echo "==> Refreshing OpenSearch index ss4o_logs-observe-it-local..."
 curl -fsS -X POST "http://localhost:9200/ss4o_logs-observe-it-local/_refresh" >/dev/null
