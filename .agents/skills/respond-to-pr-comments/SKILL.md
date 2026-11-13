@@ -36,8 +36,10 @@ resolved** while threads still under discussion stay open.
    - **Sources**: when a comment asks for a source or for proof that something is correct, answer with a verifiable
      link (Javadoc, JEP, Spring reference, paper) found through the `research` skill or a web search, and quote the line
      that supports the claim. Cite only what you have opened.
-   - **Sweep**: when a comment names one instance of a problem ("is it used?", "could be a const"), list every other
-     instance of the same problem in the PR diff and include them in the proposed fix.
+   - **Sweep**: when a comment names one instance of a problem ("is it used?", "could be a const") or requests a
+     structural or section-format change on one document ("use Good/Bad/Neutral bullets in Consequences"), list every
+     other instance or sibling file of the same kind in the PR diff (e.g., all ADRs, guides, or test classes) and
+     include them in the proposed fix.
 
    Classify every human reply. An **approval** is a bare yes to the whole plan as last presented ("good", "ok", "yes",
    "go ahead", "I accept"). Anything else is an **amendment**: a suggestion, question, condition, alternative, "wdyt",

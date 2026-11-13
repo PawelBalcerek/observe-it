@@ -213,8 +213,10 @@ healthcheck:
 > check probes. Attaching the agent to short-lived probe processes incurs substantial JVM startup overhead, inflates
 > CPU consumption, and pollutes your telemetry collector with spurious probe events.
 
-For complete architectural details on zero-code bytecode instrumentation versus compile-time appenders, see
-[ADR-0001: Zero-Code OpenTelemetry Java Agent and Logback OTLP Bridge](../adr/0001-zero-code-otel-javaagent-and-logback-bridge.md).
+For complete architectural details on zero-code bytecode instrumentation and the `opentelemetry-api` metrics boundary,
+see [ADR-0001: Zero-Code OpenTelemetry Java Agent and Logback OTLP Bridge](../adr/0001-zero-code-otel-javaagent-and-logback-bridge.md)
+and
+[ADR-0006: OpenTelemetry API Domain Metrics Port Boundary and In-Memory Testing](../adr/0006-otel-api-domain-metrics-port-and-in-memory-testing.md).
 
 ## OpenTelemetry Collector Pipeline (otlp → memory_limiter → batch → opensearch)
 

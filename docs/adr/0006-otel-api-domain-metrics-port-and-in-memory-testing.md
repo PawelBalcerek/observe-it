@@ -68,10 +68,15 @@ pure `domain` metric ports, and verify all emitted metrics in memory using `open
 
 ## Consequences
 
-- **Positive**: Domain services remain 100% free of OpenTelemetry imports; `OtelOrderMetrics` and `OtelTrafficMetrics`
-  are tested directly in unit and black-box integration tests with `MetricCapture` (`InMemoryMetricReader.createDelta()`);
-  the Java Agent continues to own SDK lifecycle, batching, and OTLP export at runtime.
-- **Trade-offs / Constraints**: Both services now carry `io.opentelemetry:opentelemetry-api` (and its transitive
-  `opentelemetry-context` / `opentelemetry-common` artifacts) on `runtimeClasspath`. Any test context that loads
-  `OtelOrderMetrics` or `OtelTrafficMetrics` without the Java Agent must supply `TestMetricsConfiguration` so
-  `GlobalOpenTelemetry.get()` does not fall back to a no-op instance.
+- **Good, because** domain services (`OrderService`, `CheckoutScenarioRunner`) remain 100% free of OpenTelemetry imports
+  behind `OrderMetrics` and `TrafficMetrics`.
+- **Good, because** `OtelOrderMetrics` and `OtelTrafficMetrics` are verified deterministically in unit and black-box
+  integration tests via `MetricCapture` (`InMemoryMetricReader.createDelta()`) without spinning up an OTLP collector
+  or using `@DirtiesContext`.
+- **Good, because** the OpenTelemetry Java Agent continues to own SDK lifecycle, batching, and OTLP export at runtime.
+- **Bad, because** both services now carry `io.opentelemetry:opentelemetry-api` (and its transitive
+  `opentelemetry-context` / `opentelemetry-common` artifacts) on `runtimeClasspath`.
+- **Bad, because** any test context loading `OtelOrderMetrics` or `OtelTrafficMetrics` without the Java Agent must
+  supply `TestMetricsConfiguration` so `GlobalOpenTelemetry.get()` does not fall back to a no-op instance.
+- **Neutral, because** Gate 1 in `scripts/verify.sh` replaces the Milestone 1 `ClasspathVerificationTest` unit tests to
+  enforce the API-only runtime classpath boundary.

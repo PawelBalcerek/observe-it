@@ -74,10 +74,14 @@ We divide telemetry attribution between scoped MDC correlation and SLF4J 2 fluen
 
 ## Consequences
 
-- **Positive**: Clear guideline for developers (request/scenario-wide correlation belongs in `CorrelationContext` /
-  MDC; single-event attributes and typed numbers belong in `.addKeyValue()`); both metadata streams merge seamlessly
-  into `attributes.*` in the **SS4O Log Index** via the OpenTelemetry Logback bridge while remaining independently
-  testable in memory via `LogCapture`.
-- **Trade-offs / Constraints**: MDC is thread-local, requiring virtual-thread tasks and servlet filters to strictly
-  clear `CorrelationContext` in `finally` blocks; any asynchronous child tasks executed within a request would require
-  explicit MDC propagation.
+- **Good, because** developers get a clear boundary: request/scenario-wide correlation belongs in `CorrelationContext` /
+  MDC, while single-event attributes and typed numbers belong in `.addKeyValue()`.
+- **Good, because** native `Double` and `Long` values are preserved in `attributes.*` in the **SS4O Log Index** for
+  numeric range queries and aggregations.
+- **Good, because** `LogCapture` tests both `keyValues` and `mdc` in memory without starting the OpenTelemetry Java
+  Agent.
+- **Bad, because** MDC is thread-local, requiring servlet filters and virtual-thread tasks to clear `CorrelationContext`
+  in `finally` blocks to prevent context leakage.
+- **Bad, because** any asynchronous child tasks spawned within a request must explicitly propagate MDC context.
+- **Neutral, because** `CorrelationContext` remains write-only telemetry state; business logic never reads values back
+  from MDC.

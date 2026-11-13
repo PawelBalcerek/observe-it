@@ -6,7 +6,7 @@
     "dev": "vitepress dev",
     "build": "vitepress build",
     "preview": "vitepress preview",
-    "lint": "markdownlint-cli2 --config .markdownlint-cli2.jsonc && node scripts/lint-mermaid.mjs",
+    "lint": "markdownlint-cli2 --config .markdownlint-cli2.jsonc && node scripts/lint-mermaid.mjs && node scripts/lint-adr.mjs",
     "lint:fix": "markdownlint-cli2 --config .markdownlint-cli2.jsonc --fix",
     "test": "node --test scripts/*.test.mjs"
   },

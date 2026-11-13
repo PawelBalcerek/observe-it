@@ -5,10 +5,10 @@ dev-docker:
 	docker run --rm -p 5173:5173 -v "$$(git rev-parse --show-toplevel):/workspace" -v observe-it-docs-node-modules:/workspace/docs/node_modules -w /workspace/docs node:26-alpine sh -c "npm install && npm run dev -- --host 0.0.0.0"
 
 build-docker:
-	docker run --rm -v "$$(git rev-parse --show-toplevel):/workspace" -v observe-it-docs-node-modules:/workspace/docs/node_modules -w /workspace/docs node:26-alpine sh -c "npm ci && npm run lint && npm run build"
+	docker run --rm -v "$$(git rev-parse --show-toplevel):/workspace" -v observe-it-docs-node-modules:/workspace/docs/node_modules -w /workspace/docs node:26-alpine sh -c "npm ci && npm run lint && npm test && npm run build"
 
 lint-docker:
-	docker run --rm -v "$$(git rev-parse --show-toplevel):/workspace" -v observe-it-docs-node-modules:/workspace/docs/node_modules -w /workspace/docs node:26-alpine sh -c "npm ci && npm run lint"
+	docker run --rm -v "$$(git rev-parse --show-toplevel):/workspace" -v observe-it-docs-node-modules:/workspace/docs/node_modules -w /workspace/docs node:26-alpine sh -c "npm ci && npm run lint && npm test"
 
 dev:
 	@if command -v npm >/dev/null 2>&1; then \
@@ -20,7 +20,7 @@ dev:
 
 build:
 	@if command -v npm >/dev/null 2>&1; then \
-		npm ci && npm run lint && npm run build; \
+		npm ci && npm run lint && npm test && npm run build; \
 	else \
 		$(MAKE) build-docker; \
 	fi
@@ -28,7 +28,7 @@ build:
 lint:
 	@if command -v npm >/dev/null 2>&1; then \
 		if [ ! -d node_modules ]; then npm ci; fi; \
-		npm run lint; \
+		npm run lint && npm test; \
 	else \
 		$(MAKE) lint-docker; \
 	fi

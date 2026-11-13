@@ -61,10 +61,13 @@ structure at index time via an OpenSearch Painless ingest pipeline:
 
 ## Consequences
 
-- **Positive**: Eliminates 512 MB+ of container memory overhead by omitting Data Prepper; guarantees deterministic
-  schema mappings (`keyword`, `long`, `double`, `date_nanos`) and ergonomic top-level fields (`service`, `level`,
-  `logger`, `message`, `exception`) alongside nested domain attributes (`attributes.order.*`, `attributes.payment.*`,
-  `attributes.inventory.*`).
-- **Trade-offs / Constraints**: Document normalization logic is codified in an OpenSearch Painless script coupled to
-  the SS4O exporter's serialized JSON structure; the Collector must await `opensearch-bootstrap` completion before
-  shipping logs to prevent early records from bypassing pipeline processing.
+- **Good, because** omitting Data Prepper eliminates 512 MB+ of container memory overhead and an extra network hop.
+- **Good, because** explicit schema mappings (`keyword`, `long`, `double`, `date_nanos`) and promoted top-level fields
+  (`service`, `level`, `logger`, `message`, `exception`) work out of the box in Discover and DQL queries alongside
+  nested domain attributes (`attributes.order.*`, `attributes.payment.*`, `attributes.inventory.*`).
+- **Bad, because** document normalization logic is codified in an OpenSearch Painless script coupled to the SS4O
+  exporter's serialized JSON structure.
+- **Bad, because** `otel-collector` must wait for `opensearch-bootstrap` completion before shipping logs so early
+  records do not bypass pipeline processing or trigger dynamic mapping.
+- **Neutral, because** the same bootstrap and ingest-pipeline pattern extends directly to `ss4o_metrics-*` in
+  Milestone 2 ([ADR-0007](0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md)).

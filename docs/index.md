@@ -85,7 +85,7 @@ fundamentals to canonical upstream documentation alongside core repository entry
 - [OpenTelemetry Collector Documentation](https://opentelemetry.io/docs/collector/) — Receivers, processors
   (`memory_limiter`, `batch`), and exporters.
 - [Simple Schema for Observability (SS4O)](https://docs.opensearch.org/latest/observing-your-data/ss4o/) — OpenSearch
-  schema conventions for `ss4o_logs-*` indices.
+  schema conventions for `ss4o_logs-*` and `ss4o_metrics-*` indices.
 - [OpenSearch Dashboards Query Language (DQL)](https://docs.opensearch.org/latest/dashboards/dql/) — Filtering and
   querying structured fields in Discover.
 - [SLF4J 2 Fluent Logging API](https://www.slf4j.org/manual.html#fluent) — Structured `.atInfo().addKeyValue(...)`
