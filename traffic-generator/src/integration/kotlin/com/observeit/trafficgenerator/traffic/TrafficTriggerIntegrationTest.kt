@@ -13,6 +13,7 @@ import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.LOW_STOCK_
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.OUT_OF_STOCK
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_DECLINED
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_GATEWAY_TIMEOUT
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -25,22 +26,22 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
-import org.springframework.test.annotation.DirtiesContext
-import org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.web.client.RestClient
 
-@DirtiesContext(classMode = AFTER_EACH_TEST_METHOD)
 @Import(TrafficTriggerIntegrationTest.MockServerConfig::class)
 class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServer: MockRestServiceServer) :
     IntegrationTest() {
 
     private val observedApp = ObservedAppMockFixture(mockServer)
     private val trafficApi by lazy { TrafficApiFixture(restTestClient) }
+    private var baselineCounts: Map<CheckoutScenario, Long> = emptyMap()
 
     @BeforeEach
     fun setUp() {
         mockServer.reset()
+        baselineCounts = trafficApi.getStatusAndExpect200().scenarioExecutionCounts
+        metricCapture.drainAndReset()
     }
 
     @AfterEach
@@ -76,6 +77,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         // and
         val status = trafficApi.getStatusAndExpect200()
         status shouldBe aTrafficStatusResponse(scenarioExecutionCounts = expectedCountsWithIncrement(HAPPY_PATH))
+        assertScenarioMetricsRecorded(scenario = HAPPY_PATH, finalState = "SHIPPED")
     }
 
     @Test
@@ -108,6 +110,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(LOW_STOCK_WARNING),
         )
+        assertScenarioMetricsRecorded(scenario = LOW_STOCK_WARNING, finalState = "SHIPPED")
     }
 
     @Test
@@ -136,6 +139,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         // and
         val status = trafficApi.getStatusAndExpect200()
         status shouldBe aTrafficStatusResponse(scenarioExecutionCounts = expectedCountsWithIncrement(OUT_OF_STOCK))
+        assertScenarioMetricsRecorded(scenario = OUT_OF_STOCK, finalState = "FAILED")
     }
 
     @Test
@@ -167,6 +171,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(PAYMENT_DECLINED),
         )
+        assertScenarioMetricsRecorded(scenario = PAYMENT_DECLINED, finalState = "FAILED")
     }
 
     @Test
@@ -198,6 +203,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(PAYMENT_GATEWAY_TIMEOUT),
         )
+        assertScenarioMetricsRecorded(scenario = PAYMENT_GATEWAY_TIMEOUT, finalState = "FAILED")
     }
 
     @Test
@@ -229,6 +235,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(BUYER_CANCELLATION),
         )
+        assertScenarioMetricsRecorded(scenario = BUYER_CANCELLATION, finalState = "CANCELLED")
     }
 
     @Test
@@ -269,6 +276,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(INVALID_STATE_TRANSITION),
         )
+        assertScenarioMetricsRecorded(scenario = INVALID_STATE_TRANSITION, finalState = "CANCELLED")
     }
 
     @Test
@@ -296,6 +304,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
 
         // and
         observedApp.verify()
+        assertScenarioMetricsRecorded(scenario = HAPPY_PATH, finalState = "SHIPPED")
     }
 
     @ParameterizedTest(name = "{0}")
@@ -312,9 +321,26 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
     }
 
     private fun expectedCountsWithIncrement(incrementedScenario: CheckoutScenario): Map<CheckoutScenario, Long> =
-        CheckoutScenario.entries.associateWith { scenario ->
-            if (scenario == incrementedScenario) 1L else 0L
-        }
+        baselineCounts + (incrementedScenario to baselineCounts.getValue(incrementedScenario) + 1L)
+
+    private fun assertScenarioMetricsRecorded(scenario: CheckoutScenario, finalState: String) {
+        metricCapture.assertCounterIncremented(
+            name = "traffic.scenarios.executed",
+            unit = "{scenario}",
+            delta = 1L,
+            attributes = mapOf(
+                "checkout.scenario" to scenario.name,
+                "order.state" to finalState,
+            ),
+        )
+        val durationPoint = metricCapture.assertHistogramRecorded(
+            name = "traffic.scenario.duration",
+            unit = "ms",
+            count = 1L,
+            attributes = mapOf("checkout.scenario" to scenario.name),
+        )
+        durationPoint.sum shouldBeGreaterThanOrEqualTo 0.0
+    }
 
     @TestConfiguration
     class MockServerConfig {

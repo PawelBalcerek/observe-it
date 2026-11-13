@@ -2,6 +2,12 @@
 
 ## Agent skills
 
+### Interactive questioning
+
+Ask clarifying or seam-confirmation questions only during `wayfinder` and `grilling` (`grill-me`, `grill-with-docs`,
+`grilling`) sessions. During `implement` (including `tdd`), select and proceed with the best-fit seams and defaults
+directly without pausing for confirmation.
+
 ### Issue tracker
 
 Issues and PRDs live in GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.

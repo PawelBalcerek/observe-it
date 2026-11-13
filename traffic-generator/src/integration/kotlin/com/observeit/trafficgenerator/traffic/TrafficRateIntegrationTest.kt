@@ -11,15 +11,13 @@ import com.observeit.trafficgenerator.traffic.api.TrafficApiFixture
 import com.observeit.trafficgenerator.traffic.api.UpdateTrafficRateRequest
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.FieldSource
-import org.springframework.test.annotation.DirtiesContext
-import org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD
 
-@DirtiesContext(classMode = AFTER_EACH_TEST_METHOD)
 class TrafficRateIntegrationTest : IntegrationTest() {
 
     @JvmField
@@ -28,9 +26,15 @@ class TrafficRateIntegrationTest : IntegrationTest() {
 
     private val trafficApi by lazy { TrafficApiFixture(restTestClient) }
 
+    @BeforeEach
+    fun setUp() {
+        resetTrafficControl()
+        metricCapture.drainAndReset()
+    }
+
     @AfterEach
     fun tearDown() {
-        trafficApi.pauseAndExpect200()
+        resetTrafficControl()
     }
 
     @Test
@@ -40,6 +44,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
 
         // when
         val rateResponse = trafficApi.updateRateAndExpect200(request)
+        metricCapture.drainAndReset()
 
         // then
         rateResponse shouldBe anUpdateTrafficRateResponse(ordersPerSecond = 2.5, concurrency = 5)
@@ -47,6 +52,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         // and
         val statusResponse = trafficApi.getStatusAndExpect200()
         statusResponse shouldBe aTrafficStatusResponse(ordersPerSecond = 2.5, concurrency = 5)
+        metricCapture.assertWorkerGauges(targetRate = 2.5, activeWorkers = 0L)
 
         // and
         logCapture.assertLogged(
@@ -66,6 +72,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
 
         // when
         val rateResponse = trafficApi.updateRateAndExpect200(request)
+        metricCapture.drainAndReset()
 
         // then
         rateResponse shouldBe anUpdateTrafficRateResponse(ordersPerSecond = 4.0, concurrency = 3)
@@ -73,6 +80,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         // and
         val statusResponse = trafficApi.getStatusAndExpect200()
         statusResponse shouldBe aTrafficStatusResponse(ordersPerSecond = 4.0, concurrency = 3)
+        metricCapture.assertWorkerGauges(targetRate = 4.0, activeWorkers = 0L)
 
         // and
         logCapture.assertLogged(
@@ -92,6 +100,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
 
         // when
         val rateResponse = trafficApi.updateRateAndExpect200(request)
+        metricCapture.drainAndReset()
 
         // then
         rateResponse shouldBe anUpdateTrafficRateResponse(ordersPerSecond = 1.0, concurrency = 6)
@@ -99,6 +108,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         // and
         val statusResponse = trafficApi.getStatusAndExpect200()
         statusResponse shouldBe aTrafficStatusResponse(ordersPerSecond = 1.0, concurrency = 6)
+        metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 0L)
 
         // and
         logCapture.assertLogged(
@@ -109,6 +119,22 @@ class TrafficRateIntegrationTest : IntegrationTest() {
                 "traffic.concurrency" to 6,
             ),
         )
+    }
+
+    @Test
+    fun `post rate updates target rate and active workers gauges when running`() {
+        // given
+        trafficApi.resumeAndExpect200()
+
+        // when
+        val rateResponse = trafficApi.updateRateAndExpect200(anUpdateTrafficRateRequest(ordersPerSecond = 4.5))
+        metricCapture.drainAndReset()
+
+        // then
+        rateResponse shouldBe anUpdateTrafficRateResponse(ordersPerSecond = 4.5, concurrency = 5)
+
+        // and
+        metricCapture.assertWorkerGauges(targetRate = 4.5, activeWorkers = 5L)
     }
 
     @ParameterizedTest(name = "{0}")
@@ -125,7 +151,20 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         problem.shouldBeValidationError(expectedError)
     }
 
+    private fun resetTrafficControl() {
+        trafficApi.pauseAndExpect200()
+        trafficApi.updateRateAndExpect200(
+            anUpdateTrafficRateRequest(
+                ordersPerSecond = DEFAULT_ORDERS_PER_SECOND,
+                concurrency = DEFAULT_CONCURRENCY,
+            ),
+        )
+    }
+
     companion object {
+        private const val DEFAULT_ORDERS_PER_SECOND = 1.0
+        private const val DEFAULT_CONCURRENCY = 3
+
         @JvmStatic
         val invalidRateRequests = listOf(
             Arguments.of(
