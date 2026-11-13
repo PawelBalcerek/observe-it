@@ -1,0 +1,11 @@
+{
+  "description": "Observe-it metrics field normalization and scalar value unification pipeline",
+  "processors": [
+    {
+      "script": {
+        "description": "Promote service, version, and env, copy value@int/value@double into unified value, and remove attributes.data_stream",
+        "source": "if (ctx.resource != null) { if (ctx.resource['service.name'] != null) { ctx.service = ctx.resource['service.name']; } if (ctx.resource['service.version'] != null) { ctx.version = ctx.resource['service.version']; } if (ctx.resource['deployment.environment.name'] != null) { ctx.env = ctx.resource['deployment.environment.name']; } } if (ctx.service == null && ctx.serviceName != null) { ctx.service = ctx.serviceName; } if (ctx['value@double'] != null) { ctx.value = ((Number) ctx['value@double']).doubleValue(); } else if (ctx['value@int'] != null) { ctx.value = ((Number) ctx['value@int']).doubleValue(); } if (ctx.attributes != null) { ctx.attributes.remove('data_stream'); }"
+      }
+    }
+  ]
+}

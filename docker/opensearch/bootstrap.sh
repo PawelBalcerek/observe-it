@@ -19,7 +19,21 @@ curl -fsS -X PUT "http://opensearch:9200/_index_template/observe-it-ss4o-logs" \
   -H "Content-Type: application/json" \
   -d "@/bootstrap/index-template.json"
 echo ""
-echo "==> Index template registered."
+echo "==> Log index template registered."
+
+echo "==> Registering metrics ingest pipeline: observe-it-metrics-pipeline..."
+curl -fsS -X PUT "http://opensearch:9200/_ingest/pipeline/observe-it-metrics-pipeline" \
+  -H "Content-Type: application/json" \
+  -d "@/bootstrap/metrics-ingest-pipeline.json"
+echo ""
+echo "==> Metrics ingest pipeline registered."
+
+echo "==> Registering SS4O metrics index template: observe-it-ss4o-metrics..."
+curl -fsS -X PUT "http://opensearch:9200/_index_template/observe-it-ss4o-metrics" \
+  -H "Content-Type: application/json" \
+  -d "@/bootstrap/metrics-index-template.json"
+echo ""
+echo "==> Metrics index template registered."
 
 echo "==> Waiting for OpenSearch Dashboards (http://opensearch-dashboards:5601/api/status) to be available..."
 until [ "$(curl -s -o /dev/null -w "%{http_code}" http://opensearch-dashboards:5601/api/status || true)" = "200" ]; do

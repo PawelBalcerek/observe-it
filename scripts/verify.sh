@@ -156,8 +156,9 @@ done
 echo "==> Waiting 5s for Collector batch flush..."
 sleep 5
 
-echo "==> Refreshing OpenSearch index ss4o_logs-observe-it-local..."
+echo "==> Refreshing OpenSearch indices ss4o_logs-observe-it-local and ss4o_metrics-observe-it-local..."
 curl -fsS -X POST "http://localhost:9200/ss4o_logs-observe-it-local/_refresh" >/dev/null
+curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_refresh" >/dev/null
 echo "Gate 3 PASSED: Deterministic 7-Scenario Trigger Gate"
 
 # ----------------------------------------------------------------------
@@ -419,23 +420,254 @@ echo "✔ Clean normalized fields (message, level, logger, env, service, version
 echo "Gate 4 PASSED: OpenSearch ss4o_logs-observe-it-local Schema & Telemetry Gate"
 
 # ----------------------------------------------------------------------
-# Gate 5: OpenSearch Dashboards Saved Objects Gate
+# Gate 5: OpenSearch ss4o_metrics-observe-it-local Schema & Telemetry Gate
 # ----------------------------------------------------------------------
 echo ""
 echo "------------------------------------------------------------------------"
-echo " Gate 5: OpenSearch Dashboards Saved Objects Gate"
+echo " Gate 5: OpenSearch ss4o_metrics-observe-it-local Schema & Telemetry Gate"
+echo "------------------------------------------------------------------------"
+
+echo "==> Verifying _index_template/observe-it-ss4o-metrics and _ingest/pipeline/observe-it-metrics-pipeline exist..."
+METRICS_TEMPLATE_COUNT="$(curl -fsS "http://localhost:9200/_index_template/observe-it-ss4o-metrics" | jq '.index_templates | length')"
+if [ "${METRICS_TEMPLATE_COUNT}" -lt 1 ]; then
+  echo "FAIL: _index_template/observe-it-ss4o-metrics does not exist"
+  exit 1
+fi
+METRICS_PIPELINE_COUNT="$(curl -fsS "http://localhost:9200/_ingest/pipeline/observe-it-metrics-pipeline" | jq 'keys | length')"
+if [ "${METRICS_PIPELINE_COUNT}" -lt 1 ]; then
+  echo "FAIL: _ingest/pipeline/observe-it-metrics-pipeline does not exist"
+  exit 1
+fi
+echo "Index template observe-it-ss4o-metrics and pipeline observe-it-metrics-pipeline exist."
+
+echo "==> Verifying ss4o_metrics-observe-it-local index health is green (1 shard, 0 replicas)..."
+METRICS_INDEX_HEALTH="$(curl -fsS "http://localhost:9200/_cluster/health/ss4o_metrics-observe-it-local" | jq -r .status)"
+if [ "${METRICS_INDEX_HEALTH}" != "green" ]; then
+  echo "FAIL: ss4o_metrics-observe-it-local index health is '${METRICS_INDEX_HEALTH}', expected 'green'"
+  exit 1
+fi
+
+METRICS_INDEX_SETTINGS="$(curl -fsS "http://localhost:9200/ss4o_metrics-observe-it-local/_settings")"
+METRICS_SHARDS="$(echo "${METRICS_INDEX_SETTINGS}" | jq -r '.[].settings.index.number_of_shards')"
+METRICS_REPLICAS="$(echo "${METRICS_INDEX_SETTINGS}" | jq -r '.[].settings.index.number_of_replicas')"
+if [ "${METRICS_SHARDS}" != "1" ] || [ "${METRICS_REPLICAS}" != "0" ]; then
+  echo "FAIL: Expected 1 shard and 0 replicas on ss4o_metrics-observe-it-local, got shards=${METRICS_SHARDS}, replicas=${METRICS_REPLICAS}"
+  exit 1
+fi
+echo "Metrics index health is green (1 shard, 0 replicas)."
+
+echo "==> Verifying normalized fields, 0 attributes.data_stream, and DELTA temporality..."
+for svc in "observed-app" "traffic-generator"; do
+  SVC_METRIC_DOCS="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_count" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"query\": {
+        \"bool\": {
+          \"must\": [
+            {\"term\": {\"service\": \"${svc}\"}},
+            {\"term\": {\"version\": \"${IMAGE_TAG}\"}},
+            {\"term\": {\"env\": \"local\"}}
+          ]
+        }
+      }
+    }" | jq -r .count)"
+  if [ "${SVC_METRIC_DOCS}" -le 0 ]; then
+    echo "FAIL: No normalized metric documents found for service=${svc}, version=${IMAGE_TAG}, env=local"
+    exit 1
+  fi
+  echo "✔ ${svc}: ${SVC_METRIC_DOCS} normalized metric documents."
+done
+
+DATA_STREAM_DOCS="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_count" \
+  -H "Content-Type: application/json" \
+  -d '{"query":{"exists":{"field":"attributes.data_stream"}}}' | jq -r .count)"
+if [ "${DATA_STREAM_DOCS}" -ne 0 ]; then
+  echo "FAIL: Found ${DATA_STREAM_DOCS} metric documents with attributes.data_stream"
+  exit 1
+fi
+echo "✔ 0 metric documents contain attributes.data_stream."
+
+NON_DELTA_COUNT="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_count" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "bool": {
+        "must": [
+          {
+            "bool": {
+              "should": [
+                {"bool": {"must": [{"term": {"kind": "SUM"}}, {"term": {"monotonic": true}}]}},
+                {"term": {"kind": "HISTOGRAM"}}
+              ],
+              "minimum_should_match": 1
+            }
+          }
+        ],
+        "must_not": [{"term": {"aggregationTemporality": "AGGREGATION_TEMPORALITY_DELTA"}}]
+      }
+    }
+  }' | jq -r .count)"
+if [ "${NON_DELTA_COUNT}" -ne 0 ]; then
+  echo "FAIL: Found ${NON_DELTA_COUNT} monotonic SUM/HISTOGRAM documents without AGGREGATION_TEMPORALITY_DELTA"
+  exit 1
+fi
+echo "✔ All monotonic SUM (counter) and HISTOGRAM documents use AGGREGATION_TEMPORALITY_DELTA."
+
+assert_terms_keys_present() {
+  local metric_name="$1"
+  local field_name="$2"
+  shift 2
+  local expected_keys=("$@")
+
+  local keys
+  keys="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_search" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"size\": 0,
+      \"query\": {\"term\": {\"name\": \"${metric_name}\"}},
+      \"aggs\": {\"keys\": {\"terms\": {\"field\": \"${field_name}\", \"size\": 50}}}
+    }" | jq -r '.aggregations.keys.buckets[].key')"
+
+  for expected_key in "${expected_keys[@]}"; do
+    if ! echo "${keys}" | grep -qx "${expected_key}"; then
+      echo "FAIL: Metric '${metric_name}' missing ${field_name}='${expected_key}'. Actual keys:"
+      echo "${keys}"
+      exit 1
+    fi
+  done
+  echo "✔ ${metric_name}: all expected ${field_name} keys present (${expected_keys[*]})."
+}
+
+assert_metric_agg_threshold() {
+  local metric_name="$1"
+  local agg_type="$2"
+  local op="$3"
+  local threshold="$4"
+
+  local actual
+  actual="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_search" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"size\": 0,
+      \"query\": {\"term\": {\"name\": \"${metric_name}\"}},
+      \"aggs\": {\"val\": {\"${agg_type}\": {\"field\": \"value\"}}}
+    }" | jq -r '.aggregations.val.value // 0')"
+
+  if [ "$(awk "BEGIN {print (${actual} ${op} ${threshold})}")" != "1" ]; then
+    echo "FAIL: ${metric_name} ${agg_type}(value) is ${actual}, expected ${op} ${threshold}"
+    exit 1
+  fi
+  echo "✔ ${metric_name} ${agg_type}(value)=${actual} (${op} ${threshold})."
+}
+
+echo "==> Verifying all 6 Observed App domain meters..."
+assert_metric_agg_threshold "orders.created" "sum" ">=" "7"
+
+assert_terms_keys_present "order.state.transitions" "attributes.order.state" \
+  "RESERVED" "PAID" "SHIPPED" "FAILED" "CANCELLED"
+
+assert_terms_keys_present "order.errors" "attributes.error.type" \
+  "INVALID_STATE_TRANSITION" "OUT_OF_STOCK" "PAYMENT_DECLINED" "GATEWAY_TIMEOUT"
+
+assert_terms_keys_present "order.inventory.reservations" "attributes.inventory.outcome" \
+  "RESERVED" "LOW_STOCK_WARNING" "OUT_OF_STOCK"
+
+assert_terms_keys_present "order.payment.duration" "attributes.payment.outcome" \
+  "SUCCESS" "DECLINED" "TIMEOUT"
+
+PAYMENT_TIMEOUT_RES="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_search?size=5" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "bool": {
+        "must": [
+          {"term": {"name": "order.payment.duration"}},
+          {"term": {"attributes.payment.outcome": "TIMEOUT"}},
+          {"range": {"max": {"gte": 1000}}},
+          {"nested": {"path": "buckets", "query": {"range": {"buckets.count": {"gt": 0}}}}}
+        ]
+      }
+    }
+  }')"
+PAYMENT_TIMEOUT_COUNT="$(echo "${PAYMENT_TIMEOUT_RES}" | jq -r '.hits.total.value')"
+if [ "${PAYMENT_TIMEOUT_COUNT}" -le 0 ]; then
+  echo "FAIL: order.payment.duration TIMEOUT missing max >= 1000 or non-empty buckets"
+  exit 1
+fi
+echo "✔ order.payment.duration TIMEOUT has max >= 1000 and non-empty buckets (${PAYMENT_TIMEOUT_COUNT} docs)."
+
+assert_metric_agg_threshold "order.repository.size" "max" ">=" "7"
+
+echo "==> Verifying all 4 Traffic Generator meters..."
+assert_terms_keys_present "traffic.scenarios.executed" "attributes.checkout.scenario" "${SCENARIOS[@]}"
+assert_terms_keys_present "traffic.scenario.duration" "attributes.checkout.scenario" "${SCENARIOS[@]}"
+
+assert_metric_agg_threshold "traffic.target_rate" "max" ">" "0"
+assert_metric_agg_threshold "traffic.workers.active" "max" ">" "0"
+
+echo "==> Verifying auto-instrumented HTTP and JVM meters..."
+for auto_meter in "http.server.request.duration" "http.client.request.duration" "jvm.thread.count" "jvm.cpu.recent_utilization"; do
+  AUTO_COUNT="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_count" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\":{\"term\":{\"name\":\"${auto_meter}\"}}}" | jq -r .count)"
+  if [ "${AUTO_COUNT}" -le 0 ]; then
+    echo "FAIL: Auto-instrumented meter '${auto_meter}' has 0 documents"
+    exit 1
+  fi
+  echo "✔ ${auto_meter}: ${AUTO_COUNT} documents."
+done
+
+JVM_MEM_MATCHES="$(curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_count" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "bool": {
+        "must": [
+          {"term": {"name": "jvm.memory.used"}},
+          {"range": {"value@int": {"gt": 0}}},
+          {"range": {"value": {"gt": 0}}}
+        ]
+      }
+    }
+  }' | jq -r .count)"
+if [ "${JVM_MEM_MATCHES}" -le 0 ]; then
+  echo "FAIL: jvm.memory.used has 0 documents with positive 64-bit value@int and value"
+  exit 1
+fi
+echo "✔ jvm.memory.used: ${JVM_MEM_MATCHES} documents with positive value@int and value."
+echo "Gate 5 PASSED: OpenSearch ss4o_metrics-observe-it-local Schema & Telemetry Gate"
+
+# ----------------------------------------------------------------------
+# Gate 6: OpenSearch Dashboards Saved Objects Gate
+# ----------------------------------------------------------------------
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Gate 6: OpenSearch Dashboards Saved Objects Gate"
 echo "------------------------------------------------------------------------"
 
 SAVED_OBJECTS="$(curl -fsS -H "osd-xsrf: true" \
-  "http://localhost:5601/api/saved_objects/_find?type=index-pattern&type=search" | \
+  "http://localhost:5601/api/saved_objects/_find?per_page=100&type=index-pattern&type=search&type=visualization&type=dashboard" | \
   jq -r '.saved_objects[] | "\(.type):\(.id)"')"
 
 EXPECTED_SAVED_OBJECTS=(
   "index-pattern:ss4o_logs"
+  "index-pattern:ss4o_metrics"
   "search:all-order-logs"
   "search:warnings-and-rejections"
   "search:gateway-timeouts-and-errors"
   "search:checkout-scenario-explorer"
+  "search:all-metrics"
+  "search:domain-order-metrics"
+  "visualization:traffic-scenarios-by-outcome"
+  "visualization:traffic-scenario-duration"
+  "visualization:order-state-transitions"
+  "visualization:order-errors-by-type"
+  "visualization:order-payment-latency"
+  "visualization:inventory-reservations-by-outcome"
+  "visualization:http-server-requests-and-latency"
+  "visualization:jvm-heap-memory-by-service"
+  "visualization:runtime-gauges-kpi"
+  "dashboard:observe-it-metrics-overview"
 )
 
 for expected_obj in "${EXPECTED_SAVED_OBJECTS[@]}"; do
@@ -448,16 +680,18 @@ for expected_obj in "${EXPECTED_SAVED_OBJECTS[@]}"; do
   echo "✔ Saved object present: ${expected_obj}"
 done
 
-INDEX_PATTERN_HAS_TIMESTAMP="$(curl -fsS -H "osd-xsrf: true" \
-  "http://localhost:5601/api/saved_objects/index-pattern/ss4o_logs" | \
-  jq -r '.attributes.fields // ""' | jq -r '[.[] | select(.name == "@timestamp")] | length')"
+for pattern_id in "ss4o_logs" "ss4o_metrics"; do
+  INDEX_PATTERN_HAS_TIMESTAMP="$(curl -fsS -H "osd-xsrf: true" \
+    "http://localhost:5601/api/saved_objects/index-pattern/${pattern_id}" | \
+    jq -r '.attributes.fields // ""' | jq -r '[.[] | select(.name == "@timestamp")] | length')"
 
-if [ "${INDEX_PATTERN_HAS_TIMESTAMP}" -ne 1 ]; then
-  echo "FAIL: OpenSearch Dashboards index-pattern ss4o_logs does not have '@timestamp' in attributes.fields."
-  exit 1
-fi
-echo "✔ Index pattern ss4o_logs has populated fields containing '@timestamp'."
-echo "Gate 5 PASSED: OpenSearch Dashboards Saved Objects Gate"
+  if [ "${INDEX_PATTERN_HAS_TIMESTAMP}" -ne 1 ]; then
+    echo "FAIL: OpenSearch Dashboards index-pattern ${pattern_id} does not have '@timestamp' in attributes.fields."
+    exit 1
+  fi
+  echo "✔ Index pattern ${pattern_id} has populated fields containing '@timestamp'."
+done
+echo "Gate 6 PASSED: OpenSearch Dashboards Saved Objects Gate"
 
 echo ""
 echo "========================================================================"
