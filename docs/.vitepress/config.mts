@@ -55,6 +55,10 @@ export default defineConfig({
               link: '/guides/structured-logging',
             },
             {
+              text: 'Metrics & OpenSearch Dashboards in Kotlin & Spring Boot',
+              link: '/guides/metrics-and-dashboards',
+            },
+            {
               text: 'Checkout Scenarios & Dashboards Walkthrough',
               link: '/guides/exploring-telemetry',
             },
@@ -83,6 +87,14 @@ export default defineConfig({
             {
               text: '0005: Bounded Lock-Free In-Memory Order Repository',
               link: '/adr/0005-bounded-in-memory-order-repository',
+            },
+            {
+              text: '0006: OTel API Domain Metrics Port & In-Memory Testing',
+              link: '/adr/0006-otel-api-domain-metrics-port-and-in-memory-testing',
+            },
+            {
+              text: '0007: SS4O Metrics Delta Temporality & Normalization',
+              link: '/adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization',
             },
           ],
         },

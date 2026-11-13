@@ -345,3 +345,63 @@ attributes.cancellation.reason: "BUYER_CANCELLATION"
 # Isolate a single HTTP request hop via W3C traceId
 traceId: "4bf92f3577b34da6a3ce929d0e0e4736"
 ```
+
+## Exploring Metrics & Dashboards in OpenSearch
+
+While structured logs explain *why* an individual request failed, aggregated metrics and dashboards reveal system-wide
+trends—request throughput, error ratios, tail latency regressions, and resource saturation across services. Effective
+metric exploration pairs pre-built overview dashboards for macro health with saved metric searches and DQL predicates
+for drilling into specific instruments or attribute dimensions.
+
+A structured metric investigation workflow relies on two views:
+
+1. **Multi-Panel Overview Dashboards**: Combine domain throughput counters, error breakdowns, latency histograms, and
+   runtime resource gauges (heap memory, HTTP server latency) on a synchronized time picker to spot correlations
+   between traffic spikes, error surges, and saturation.
+2. **Saved Metric Searches in Discover**: Filter the underlying metrics index by instrument `name`, `service`, `kind`,
+   or bounded attribute keys to inspect individual delta or gauge points alongside raw `value`, `sum`, `count`, and
+   `max` fields.
+
+### External Sources & Ecosystem Practice
+
+- [OpenSearch Dashboards Visualize & Dashboard Guide](https://docs.opensearch.org/latest/dashboards/visualize/viz-index/)
+  — Building time-series aggregations, bar charts, and multi-panel dashboards over OpenSearch indices.
+- [OpenSearch Simple Schema for Observability (SS4O)](https://docs.opensearch.org/latest/observing-your-data/ss4o/)
+  — Standard metric document structure (`name`, `kind`, `unit`, `value`, `sum`, `count`, `min`, `max`).
+
+### In Observe-It
+
+OpenSearch bootstrap provisions the `ss4o_metrics-*` **SS4O Metrics Index** pattern, two metric saved searches in
+**Discover**, nine visualizations, and the `Observe-It Metrics Overview` dashboard from
+[`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson):
+
+| Saved Search           | DQL / Query Filter                | Selected Table Columns                                                                                                                                                                   | Primary Operational Purpose                                |
+| :--------------------- | :-------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
+| `All Metrics`          | *(none / match all)*              | `@timestamp`, `service`, `name`, `kind`, `value`, `sum`, `count`, `unit`                                                                                                                 | Browse all runtime and domain metrics across both services |
+| `Domain Order Metrics` | `name: orders.* or name: order.*` | `@timestamp`, `service`, `name`, `kind`, `value`, `sum`, `count`, `max`, `attributes.order.state`, `attributes.error.type`, `attributes.inventory.outcome`, `attributes.payment.outcome` | Inspect **Order** counters, histograms, and gauges         |
+
+Open **Dashboards** at `http://localhost:5601` and select `Observe-It Metrics Overview` to view all nine panels
+side by side:
+
+- **Traffic Generator panels**: `Traffic Scenarios by Outcome`, `Traffic Scenario Duration (ms)`, and workload gauges in
+  `Runtime Gauges KPI` (`traffic.target_rate`, `traffic.workers.active`).
+- **Observed App domain panels**: `Order State Transitions`, `Order Errors by Type`, `Order Payment Latency (ms)`, and
+  `Inventory Reservations by Outcome`.
+- **Runtime & HTTP panels**: `HTTP Server Requests & Latency`, `JVM Memory Used by Service`, and `order.repository.size`
+  in `Runtime Gauges KPI`.
+
+To query `ss4o_metrics-*` directly in **Discover**, switch the index pattern to `ss4o_metrics-*` and apply DQL filters:
+
+```text
+# Filter all custom domain metrics for a specific service
+service: "observed-app" and (name: orders.* or name: order.*)
+
+# Inspect payment gateway timeout histogram points
+name: "order.payment.duration" and attributes.payment.outcome: "TIMEOUT"
+
+# Compare scenario execution counts by Checkout Scenario
+name: "traffic.scenarios.executed" and attributes.checkout.scenario: "PAYMENT_GATEWAY_TIMEOUT"
+
+# Inspect JVM heap usage across services
+name: "jvm.memory.used" and attributes.jvm.memory.type: "heap"
+```
