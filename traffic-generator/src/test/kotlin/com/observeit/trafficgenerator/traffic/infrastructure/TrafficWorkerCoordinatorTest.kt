@@ -14,6 +14,7 @@ import com.observeit.trafficgenerator.traffic.domain.PayOrderResult
 import com.observeit.trafficgenerator.traffic.domain.ReserveOrderResult
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
 import com.observeit.trafficgenerator.traffic.domain.ShipOrderResult
+import com.observeit.trafficgenerator.traffic.domain.TrafficMetrics
 import com.observeit.trafficgenerator.traffic.domain.TrafficRateUpdate
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
@@ -36,6 +37,13 @@ import kotlin.math.max
 class TrafficWorkerCoordinatorTest {
 
     private var coordinator: TrafficWorkerCoordinator? = null
+    private val noOpTrafficMetrics = object : TrafficMetrics {
+        override fun recordScenarioExecuted(scenario: CheckoutScenario, finalState: String) = Unit
+
+        override fun recordScenarioDuration(scenario: CheckoutScenario, durationMs: Double) = Unit
+
+        override fun registerWorkerGauges(ordersPerSecond: () -> Double, activeWorkers: () -> Long) = Unit
+    }
 
     @AfterEach
     fun tearDown() {
@@ -57,6 +65,7 @@ class TrafficWorkerCoordinatorTest {
                 executionCount.incrementAndGet()
             },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         val selector = ScenarioSelector { HAPPY_PATH }
@@ -75,6 +84,7 @@ class TrafficWorkerCoordinatorTest {
             selector = selector,
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         // when
@@ -105,6 +115,7 @@ class TrafficWorkerCoordinatorTest {
                 }
             },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         val selector = ScenarioSelector { HAPPY_PATH }
@@ -123,6 +134,7 @@ class TrafficWorkerCoordinatorTest {
             selector = selector,
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         // when
@@ -142,6 +154,7 @@ class TrafficWorkerCoordinatorTest {
         val runner = CheckoutScenarioRunner(
             client = recordingClient { executionCount.incrementAndGet() },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
@@ -153,6 +166,7 @@ class TrafficWorkerCoordinatorTest {
             selector = selector,
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
         coordinator!!.start()
 
@@ -181,6 +195,7 @@ class TrafficWorkerCoordinatorTest {
         val runner = CheckoutScenarioRunner(
             client = recordingClient { executionCount.incrementAndGet() },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
@@ -192,6 +207,7 @@ class TrafficWorkerCoordinatorTest {
             selector = selector,
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
         coordinator!!.start()
         coordinator!!.pause()
@@ -214,6 +230,7 @@ class TrafficWorkerCoordinatorTest {
         val runner = CheckoutScenarioRunner(
             client = recordingClient {},
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
@@ -225,6 +242,7 @@ class TrafficWorkerCoordinatorTest {
             selector = selector,
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         // when
@@ -240,6 +258,7 @@ class TrafficWorkerCoordinatorTest {
         val runner = CheckoutScenarioRunner(
             client = recordingClient {},
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
@@ -251,6 +270,7 @@ class TrafficWorkerCoordinatorTest {
             selector = selector,
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
         coordinator!!.start()
         coordinator!!.isRunning shouldBe true
@@ -280,6 +300,7 @@ class TrafficWorkerCoordinatorTest {
                 }
             },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         coordinator = TrafficWorkerCoordinator(
@@ -289,6 +310,7 @@ class TrafficWorkerCoordinatorTest {
                 workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = configuredConcurrency),
             ),
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         val toggleThreads = 8
@@ -345,6 +367,7 @@ class TrafficWorkerCoordinatorTest {
                 }
             },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         coordinator = TrafficWorkerCoordinator(
@@ -354,6 +377,7 @@ class TrafficWorkerCoordinatorTest {
                 workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 4),
             ),
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         // when
@@ -373,6 +397,7 @@ class TrafficWorkerCoordinatorTest {
         val runner = CheckoutScenarioRunner(
             client = recordingClient {},
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val properties = TrafficProperties(
             ordersPerSecond = 1.0,
@@ -383,6 +408,7 @@ class TrafficWorkerCoordinatorTest {
             selector = ScenarioSelector { HAPPY_PATH },
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         // when
@@ -405,6 +431,7 @@ class TrafficWorkerCoordinatorTest {
                 workerThreads.add(Thread.currentThread().name)
             },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val properties = TrafficProperties(
             ordersPerSecond = 1.0,
@@ -415,6 +442,7 @@ class TrafficWorkerCoordinatorTest {
             selector = ScenarioSelector { HAPPY_PATH },
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
         coordinator!!.start()
 
@@ -448,6 +476,7 @@ class TrafficWorkerCoordinatorTest {
         val runner = CheckoutScenarioRunner(
             client = recordingClient {},
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
         val properties = TrafficProperties(
             ordersPerSecond = 1.0,
@@ -458,6 +487,7 @@ class TrafficWorkerCoordinatorTest {
             selector = ScenarioSelector { HAPPY_PATH },
             properties = properties,
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         // when
@@ -485,6 +515,7 @@ class TrafficWorkerCoordinatorTest {
                 activeWorkers.decrementAndGet()
             },
             stepPacer = NoOpStepPacer,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         coordinator = TrafficWorkerCoordinator(
@@ -494,6 +525,7 @@ class TrafficWorkerCoordinatorTest {
                 workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
             ),
             iterationDelayMs = 1L,
+            trafficMetrics = noOpTrafficMetrics,
         )
 
         coordinator!!.start()

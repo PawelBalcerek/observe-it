@@ -7,12 +7,10 @@ import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTrafficStatusResp
 import com.observeit.trafficgenerator.traffic.api.TrafficApiFixture
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
-import org.springframework.test.annotation.DirtiesContext
-import org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD
 
-@DirtiesContext(classMode = AFTER_EACH_TEST_METHOD)
 class TrafficPauseResumeIntegrationTest : IntegrationTest() {
 
     @JvmField
@@ -20,6 +18,12 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
     final val logCapture = LogCapture()
 
     private val trafficApi by lazy { TrafficApiFixture(restTestClient) }
+
+    @BeforeEach
+    fun setUp() {
+        trafficApi.pauseAndExpect200()
+        metricCapture.drainAndReset()
+    }
 
     @AfterEach
     fun tearDown() {
@@ -31,9 +35,11 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
         // given
         val initialStatus = trafficApi.getStatusAndExpect200()
         initialStatus shouldBe aTrafficStatusResponse(running = false, paused = true)
+        metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 0L)
 
         // when
         val resumeResponse = trafficApi.resumeAndExpect200()
+        metricCapture.drainAndReset()
 
         // then
         resumeResponse shouldBe aTrafficStatusResponse(running = true, paused = false)
@@ -41,6 +47,7 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
         // and
         val statusResponse = trafficApi.getStatusAndExpect200()
         statusResponse shouldBe aTrafficStatusResponse(running = true, paused = false)
+        metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 3L)
 
         // and
         logCapture.assertLogged(
@@ -62,6 +69,7 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
 
         // when
         val pauseResponse = trafficApi.pauseAndExpect200()
+        metricCapture.drainAndReset()
 
         // then
         pauseResponse shouldBe aTrafficStatusResponse(running = false, paused = true)
@@ -69,6 +77,7 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
         // and
         val statusResponse = trafficApi.getStatusAndExpect200()
         statusResponse shouldBe aTrafficStatusResponse(running = false, paused = true)
+        metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 0L)
 
         // and
         logCapture.assertLogged(

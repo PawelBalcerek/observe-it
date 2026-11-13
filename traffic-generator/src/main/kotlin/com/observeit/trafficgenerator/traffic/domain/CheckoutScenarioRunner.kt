@@ -12,12 +12,15 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.util.UUID
+import kotlin.time.DurationUnit.MILLISECONDS
+import kotlin.time.measureTimedValue
 
 @Service
 class CheckoutScenarioRunner(
     private val client: ObservedAppClient,
     private val stepPacer: StepPacer = NoOpStepPacer,
     private val counters: ScenarioExecutionCounters = ScenarioExecutionCounters(),
+    private val trafficMetrics: TrafficMetrics,
 ) {
 
     private val logger = LoggerFactory.getLogger(CheckoutScenarioRunner::class.java)
@@ -28,19 +31,23 @@ class CheckoutScenarioRunner(
         CorrelationContext.setCustomerId(customerId)
 
         try {
-            val orderId = executeOrderCreation(scenario, customerId, scenario.sku)
-            stepPacer.pace()
+            val (finalOrder, duration) = measureTimedValue {
+                val orderId = executeOrderCreation(scenario, customerId, scenario.sku)
+                stepPacer.pace()
 
-            val stoppedEarly = executeReservation(scenario, orderId, scenario.sku)
-            if (!stoppedEarly) {
-                executeRemainingSteps(scenario, orderId)
+                val stoppedEarly = executeReservation(scenario, orderId, scenario.sku)
+                if (!stoppedEarly) {
+                    executeRemainingSteps(scenario, orderId)
+                }
+
+                retrieveFinalOrder(scenario, orderId)
             }
-
-            val finalOrder = retrieveFinalOrder(scenario, orderId)
             counters.increment(scenario)
+            trafficMetrics.recordScenarioExecuted(scenario, finalOrder.state)
+            trafficMetrics.recordScenarioDuration(scenario, duration.toDouble(MILLISECONDS))
             return ScenarioExecutionResult(
                 scenario = scenario,
-                orderId = orderId,
+                orderId = finalOrder.orderId,
                 customerId = customerId,
                 finalState = finalOrder.state,
                 success = true,

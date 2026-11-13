@@ -2,6 +2,7 @@ package com.observeit.trafficgenerator.traffic.infrastructure
 
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenarioRunner
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
+import com.observeit.trafficgenerator.traffic.domain.TrafficMetrics
 import com.observeit.trafficgenerator.traffic.domain.TrafficRate
 import com.observeit.trafficgenerator.traffic.domain.TrafficRateUpdate
 import com.observeit.trafficgenerator.traffic.domain.TrafficWorkerControl
@@ -47,6 +48,7 @@ class TrafficWorkerCoordinator(
     private val selector: ScenarioSelector,
     private val properties: TrafficProperties,
     private val iterationDelayMs: Long? = null,
+    private val trafficMetrics: TrafficMetrics,
 ) : SmartLifecycle,
     TrafficWorkerControl {
 
@@ -59,6 +61,13 @@ class TrafficWorkerCoordinator(
             concurrency = properties.workers.concurrency,
         ),
     )
+
+    init {
+        trafficMetrics.registerWorkerGauges(
+            ordersPerSecond = { ordersPerSecond },
+            activeWorkers = { if (isRunning()) concurrency.toLong() else 0L },
+        )
+    }
 
     override val concurrency: Int
         get() = rate.get().concurrency
