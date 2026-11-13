@@ -130,6 +130,10 @@ jobs:
       - name: Build native container images via bootBuildImage
         run: ./gradlew bootBuildImage
 
+      - name: Run Ktlint, Detekt, unit & integration tests before starting containers (amd64 only)
+        if: matrix.arch == 'amd64'
+        run: ./gradlew check
+
       - name: Start Docker Compose topology (amd64 only)
         if: matrix.arch == 'amd64'
         run: docker compose up -d
