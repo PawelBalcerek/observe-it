@@ -58,6 +58,15 @@ class CancelOrderIntegrationTest : IntegrationTest() {
                 "customer.id" to "customerId",
             ),
         )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "CANCELLED",
+            ),
+        )
     }
 
     @Test
@@ -89,6 +98,15 @@ class CancelOrderIntegrationTest : IntegrationTest() {
                 "checkout.scenario" to "buyer-cancellation",
                 "order.id" to created.orderId,
                 "customer.id" to "customerId",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "CANCELLED",
             ),
         )
     }
@@ -163,6 +181,12 @@ class CancelOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     companion object {

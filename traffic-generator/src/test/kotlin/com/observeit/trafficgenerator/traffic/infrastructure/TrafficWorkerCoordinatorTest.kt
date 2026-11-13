@@ -1,5 +1,6 @@
 package com.observeit.trafficgenerator.traffic.infrastructure
 
+import com.observeit.trafficgenerator.test.MetricCapture
 import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTrafficRate
 import com.observeit.trafficgenerator.traffic.domain.CancelOrderResult
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
@@ -7,14 +8,14 @@ import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.HAPPY_PATH
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenarioRunner
 import com.observeit.trafficgenerator.traffic.domain.CreateOrderItem
 import com.observeit.trafficgenerator.traffic.domain.CreateOrderResult
-import com.observeit.trafficgenerator.traffic.domain.NoOpStepPacer
 import com.observeit.trafficgenerator.traffic.domain.ObservedAppClient
 import com.observeit.trafficgenerator.traffic.domain.OrderDetails
 import com.observeit.trafficgenerator.traffic.domain.PayOrderResult
 import com.observeit.trafficgenerator.traffic.domain.ReserveOrderResult
+import com.observeit.trafficgenerator.traffic.domain.ScenarioExecutionCounters
 import com.observeit.trafficgenerator.traffic.domain.ScenarioSelector
 import com.observeit.trafficgenerator.traffic.domain.ShipOrderResult
-import com.observeit.trafficgenerator.traffic.domain.TrafficMetrics
+import com.observeit.trafficgenerator.traffic.domain.StepPacer
 import com.observeit.trafficgenerator.traffic.domain.TrafficRateUpdate
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
@@ -25,6 +26,7 @@ import org.awaitility.kotlin.await
 import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.RegisterExtension
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -36,14 +38,12 @@ import kotlin.math.max
 
 class TrafficWorkerCoordinatorTest {
 
+    @JvmField
+    @RegisterExtension
+    val metricCapture = MetricCapture()
+
     private var coordinator: TrafficWorkerCoordinator? = null
-    private val noOpTrafficMetrics = object : TrafficMetrics {
-        override fun recordScenarioExecuted(scenario: CheckoutScenario, finalState: String) = Unit
-
-        override fun recordScenarioDuration(scenario: CheckoutScenario, durationMs: Double) = Unit
-
-        override fun registerWorkerGauges(ordersPerSecond: () -> Double, activeWorkers: () -> Long) = Unit
-    }
+    private val trafficMetrics = OtelTrafficMetrics(metricCapture.openTelemetry)
 
     @AfterEach
     fun tearDown() {
@@ -57,20 +57,17 @@ class TrafficWorkerCoordinatorTest {
         val virtualFlags = ConcurrentHashMap.newKeySet<Boolean>()
         val executionCount = AtomicInteger(0)
 
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {
-                val currentThread = Thread.currentThread()
-                workerThreads.add(currentThread.name)
-                virtualFlags.add(currentThread.isVirtual)
-                executionCount.incrementAndGet()
-            },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {
+            val currentThread = Thread.currentThread()
+            workerThreads.add(currentThread.name)
+            virtualFlags.add(currentThread.isVirtual)
+            executionCount.incrementAndGet()
+        }
 
         val selector = ScenarioSelector { HAPPY_PATH }
 
         val properties = TrafficProperties(
+            ordersPerSecond = FAST_ORDERS_PER_SECOND,
             workers = TrafficProperties.WorkersProperties(
                 enabled = true,
                 concurrency = 3,
@@ -83,8 +80,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = selector,
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         // when
@@ -108,19 +104,16 @@ class TrafficWorkerCoordinatorTest {
         // given
         val executionAttempts = AtomicInteger(0)
 
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {
-                if (executionAttempts.incrementAndGet() % 2 == 1) {
-                    error("Simulated transient failure")
-                }
-            },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {
+            if (executionAttempts.incrementAndGet() % 2 == 1) {
+                error("Simulated transient failure")
+            }
+        }
 
         val selector = ScenarioSelector { HAPPY_PATH }
 
         val properties = TrafficProperties(
+            ordersPerSecond = FAST_ORDERS_PER_SECOND,
             workers = TrafficProperties.WorkersProperties(
                 enabled = true,
                 concurrency = 2,
@@ -133,8 +126,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = selector,
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         // when
@@ -151,13 +143,10 @@ class TrafficWorkerCoordinatorTest {
     fun `pauses running workers and halts scenario execution`() {
         // given
         val executionCount = AtomicInteger(0)
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient { executionCount.incrementAndGet() },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith { executionCount.incrementAndGet() }
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
+            ordersPerSecond = FAST_ORDERS_PER_SECOND,
             workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
         )
 
@@ -165,8 +154,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = selector,
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
         coordinator!!.start()
 
@@ -192,13 +180,10 @@ class TrafficWorkerCoordinatorTest {
     fun `resumes paused workers and continues execution`() {
         // given
         val executionCount = AtomicInteger(0)
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient { executionCount.incrementAndGet() },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith { executionCount.incrementAndGet() }
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
+            ordersPerSecond = FAST_ORDERS_PER_SECOND,
             workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
         )
 
@@ -206,8 +191,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = selector,
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
         coordinator!!.start()
         coordinator!!.pause()
@@ -227,11 +211,7 @@ class TrafficWorkerCoordinatorTest {
     @Test
     fun `pause is idempotent when coordinator is already stopped`() {
         // given
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {},
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {}
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
             workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 1),
@@ -241,8 +221,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = selector,
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         // when
@@ -255,13 +234,10 @@ class TrafficWorkerCoordinatorTest {
     @Test
     fun `resume is idempotent when coordinator is already running`() {
         // given
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {},
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {}
         val selector = ScenarioSelector { HAPPY_PATH }
         val properties = TrafficProperties(
+            ordersPerSecond = FAST_ORDERS_PER_SECOND,
             workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
         )
 
@@ -269,8 +245,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = selector,
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
         coordinator!!.start()
         coordinator!!.isRunning shouldBe true
@@ -289,28 +264,24 @@ class TrafficWorkerCoordinatorTest {
         val activeWorkers = AtomicInteger(0)
         val peakConcurrency = AtomicInteger(0)
 
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {
-                val current = activeWorkers.incrementAndGet()
-                peakConcurrency.updateAndGet { peak -> max(peak, current) }
-                try {
-                    CountDownLatch(1).await(SCENARIO_HOLD_DURATION_MS, MILLISECONDS)
-                } finally {
-                    activeWorkers.decrementAndGet()
-                }
-            },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {
+            val current = activeWorkers.incrementAndGet()
+            peakConcurrency.updateAndGet { peak -> max(peak, current) }
+            try {
+                CountDownLatch(1).await(SCENARIO_HOLD_DURATION_MS, MILLISECONDS)
+            } finally {
+                activeWorkers.decrementAndGet()
+            }
+        }
 
         coordinator = TrafficWorkerCoordinator(
             runner = runner,
             selector = ScenarioSelector { HAPPY_PATH },
             properties = TrafficProperties(
+                ordersPerSecond = FAST_ORDERS_PER_SECOND,
                 workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = configuredConcurrency),
             ),
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         val toggleThreads = 8
@@ -357,27 +328,23 @@ class TrafficWorkerCoordinatorTest {
     fun `stop during startup cancels cleanly without leaking active workers`() {
         // given
         val activeWorkers = AtomicInteger(0)
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {
-                activeWorkers.incrementAndGet()
-                try {
-                    CountDownLatch(1).await(STARTUP_CANCEL_HOLD_MS, MILLISECONDS)
-                } finally {
-                    activeWorkers.decrementAndGet()
-                }
-            },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {
+            activeWorkers.incrementAndGet()
+            try {
+                CountDownLatch(1).await(STARTUP_CANCEL_HOLD_MS, MILLISECONDS)
+            } finally {
+                activeWorkers.decrementAndGet()
+            }
+        }
 
         coordinator = TrafficWorkerCoordinator(
             runner = runner,
             selector = ScenarioSelector { HAPPY_PATH },
             properties = TrafficProperties(
+                ordersPerSecond = FAST_ORDERS_PER_SECOND,
                 workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 4),
             ),
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         // when
@@ -394,11 +361,7 @@ class TrafficWorkerCoordinatorTest {
     @Test
     fun `updateRate updates target ordersPerSecond and concurrency when stopped`() {
         // given
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {},
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {}
         val properties = TrafficProperties(
             ordersPerSecond = 1.0,
             workers = TrafficProperties.WorkersProperties(enabled = false, concurrency = 2),
@@ -407,8 +370,7 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = ScenarioSelector { HAPPY_PATH },
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         // when
@@ -426,23 +388,18 @@ class TrafficWorkerCoordinatorTest {
     fun `updateRate updates target concurrency dynamically and restarts active workers when running`() {
         // given
         val workerThreads = ConcurrentHashMap.newKeySet<String>()
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {
-                workerThreads.add(Thread.currentThread().name)
-            },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {
+            workerThreads.add(Thread.currentThread().name)
+        }
         val properties = TrafficProperties(
-            ordersPerSecond = 1.0,
+            ordersPerSecond = FAST_ORDERS_PER_SECOND,
             workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
         )
         coordinator = TrafficWorkerCoordinator(
             runner = runner,
             selector = ScenarioSelector { HAPPY_PATH },
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
         coordinator!!.start()
 
@@ -473,11 +430,7 @@ class TrafficWorkerCoordinatorTest {
     @Test
     fun `updateRate preserves existing concurrency when only ordersPerSecond is updated`() {
         // given
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {},
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {}
         val properties = TrafficProperties(
             ordersPerSecond = 1.0,
             workers = TrafficProperties.WorkersProperties(enabled = false, concurrency = 3),
@@ -486,12 +439,11 @@ class TrafficWorkerCoordinatorTest {
             runner = runner,
             selector = ScenarioSelector { HAPPY_PATH },
             properties = properties,
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         // when
-        val updated = coordinator!!.updateRate(TrafficRateUpdate(ordersPerSecond = 8.0))
+        val updated = coordinator!!.updateRate(TrafficRateUpdate(ordersPerSecond = 8.0, concurrency = null))
 
         // then
         updated shouldBe aTrafficRate(ordersPerSecond = 8.0, concurrency = 3)
@@ -507,25 +459,21 @@ class TrafficWorkerCoordinatorTest {
         val activeWorkers = AtomicInteger(0)
         val peakWorkers = AtomicInteger(0)
 
-        val runner = CheckoutScenarioRunner(
-            client = recordingClient {
-                val current = activeWorkers.incrementAndGet()
-                peakWorkers.accumulateAndGet(current, ::max)
-                LockSupport.parkNanos(SCENARIO_HOLD_DURATION_MS * 1_000_000)
-                activeWorkers.decrementAndGet()
-            },
-            stepPacer = NoOpStepPacer,
-            trafficMetrics = noOpTrafficMetrics,
-        )
+        val runner = runnerWith {
+            val current = activeWorkers.incrementAndGet()
+            peakWorkers.accumulateAndGet(current, ::max)
+            LockSupport.parkNanos(SCENARIO_HOLD_DURATION_MS * 1_000_000)
+            activeWorkers.decrementAndGet()
+        }
 
         coordinator = TrafficWorkerCoordinator(
             runner = runner,
             selector = ScenarioSelector { HAPPY_PATH },
             properties = TrafficProperties(
+                ordersPerSecond = FAST_ORDERS_PER_SECOND,
                 workers = TrafficProperties.WorkersProperties(enabled = true, concurrency = 2),
             ),
-            iterationDelayMs = 1L,
-            trafficMetrics = noOpTrafficMetrics,
+            trafficMetrics = trafficMetrics,
         )
 
         coordinator!!.start()
@@ -547,6 +495,13 @@ class TrafficWorkerCoordinatorTest {
             peakWorkers.get() shouldBeLessThanOrEqualTo 5
         }
     }
+
+    private fun runnerWith(onCreateOrder: () -> Unit): CheckoutScenarioRunner = CheckoutScenarioRunner(
+        client = recordingClient(onCreateOrder),
+        stepPacer = StepPacer {},
+        counters = ScenarioExecutionCounters(),
+        trafficMetrics = trafficMetrics,
+    )
 
     private fun recordingClient(onCreateOrder: () -> Unit): ObservedAppClient = object : ObservedAppClient {
         override fun createOrder(
@@ -577,6 +532,7 @@ class TrafficWorkerCoordinatorTest {
     private companion object {
         const val ORDER_ID = "order-1"
         const val STATE_SHIPPED = "SHIPPED"
+        const val FAST_ORDERS_PER_SECOND = 100.0
         const val SCENARIO_HOLD_DURATION_MS = 10L
         const val TOGGLE_INTERVAL_NANOS = 1_000_000L
         const val STARTUP_CANCEL_HOLD_MS = 50L

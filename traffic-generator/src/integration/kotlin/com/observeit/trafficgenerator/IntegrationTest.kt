@@ -29,12 +29,8 @@ abstract class IntegrationTest {
     }
 
     @BeforeEach
-    fun resetMetricCapture() {
-        metricCapture.drainAndReset()
-    }
-
     @AfterEach
-    fun clearMetricCapture() {
+    fun resetMetricCapture() {
         metricCapture.drainAndReset()
     }
 }

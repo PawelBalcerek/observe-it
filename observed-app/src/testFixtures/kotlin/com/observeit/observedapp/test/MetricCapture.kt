@@ -2,8 +2,6 @@ package com.observeit.observedapp.test
 
 import io.kotest.assertions.fail
 import io.kotest.matchers.shouldBe
-import io.opentelemetry.api.GlobalOpenTelemetry
-import io.opentelemetry.api.metrics.Meter
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.metrics.data.DoublePointData
@@ -25,16 +23,17 @@ import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtensionContext
 import java.util.concurrent.CopyOnWriteArrayList
 
-class MetricCapture(
-    private val metricReader: InMemoryMetricReader = sharedMetricReader,
-    val openTelemetry: OpenTelemetrySdk = sharedOpenTelemetry,
-) : BeforeEachCallback,
+class MetricCapture :
+    BeforeEachCallback,
     AfterEachCallback {
 
-    private val collectedMetrics = CopyOnWriteArrayList<MetricData>()
+    private val metricReader: InMemoryMetricReader = InMemoryMetricReader.createDelta()
+    private val meterProvider: SdkMeterProvider =
+        SdkMeterProvider.builder().registerMetricReader(metricReader).build()
+    val openTelemetry: OpenTelemetrySdk =
+        OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build()
 
-    val meter: Meter
-        get() = openTelemetry.getMeter(DEFAULT_INSTRUMENTATION_SCOPE)
+    private val collectedMetrics = CopyOnWriteArrayList<MetricData>()
 
     override fun beforeEach(context: ExtensionContext) {
         drainAndReset()
@@ -60,22 +59,6 @@ class MetricCapture(
         when (point) {
             is LongPointData -> point.value shouldBe delta
             is DoublePointData -> point.value shouldBe delta.toDouble()
-            else -> fail("Point for '$name' was not a numeric point data: ${point::class.simpleName}")
-        }
-        return point
-    }
-
-    fun assertCounterIncremented(
-        name: String,
-        unit: String? = null,
-        delta: Double,
-        attributes: Map<String, Any?> = emptyMap(),
-    ): PointData {
-        val metric = findMetric(name, unit)
-        val point = findMatchingPoint(name, metric.type, attributes)
-        when (point) {
-            is DoublePointData -> point.value shouldBe delta
-            is LongPointData -> point.value.toDouble() shouldBe delta
             else -> fail("Point for '$name' was not a numeric point data: ${point::class.simpleName}")
         }
         return point
@@ -111,22 +94,6 @@ class MetricCapture(
         when (point) {
             is LongPointData -> point.value shouldBe value
             is DoublePointData -> point.value shouldBe value.toDouble()
-            else -> fail("Point for '$name' was not a gauge point data: ${point::class.simpleName}")
-        }
-        return point
-    }
-
-    fun assertGaugeValue(
-        name: String,
-        unit: String? = null,
-        value: Double,
-        attributes: Map<String, Any?> = emptyMap(),
-    ): PointData {
-        val metric = findMetric(name, unit)
-        val point = findMatchingPoint(name, metric.type, attributes)
-        when (point) {
-            is DoublePointData -> point.value shouldBe value
-            is LongPointData -> point.value.toDouble() shouldBe value
             else -> fail("Point for '$name' was not a gauge point data: ${point::class.simpleName}")
         }
         return point
@@ -181,31 +148,5 @@ class MetricCapture(
             fail("No point for metric '$metricName' matched attributes $expectedAttributes. Recorded: $recorded")
         }
         return matching.last()
-    }
-
-    companion object {
-        private const val DEFAULT_INSTRUMENTATION_SCOPE = "observe-it"
-
-        private val sharedMetricReader = InMemoryMetricReader.createDelta()
-        private val sharedMeterProvider: SdkMeterProvider =
-            SdkMeterProvider.builder().registerMetricReader(sharedMetricReader).build()
-        val sharedOpenTelemetry: OpenTelemetrySdk =
-            OpenTelemetrySdk.builder().setMeterProvider(sharedMeterProvider).build()
-
-        init {
-            try {
-                GlobalOpenTelemetry.resetForTest()
-                GlobalOpenTelemetry.set(sharedOpenTelemetry)
-            } catch (_: Exception) {
-                // Ignore if already set
-            }
-        }
-
-        fun isolated(): MetricCapture {
-            val reader = InMemoryMetricReader.createDelta()
-            val provider = SdkMeterProvider.builder().registerMetricReader(reader).build()
-            val sdk = OpenTelemetrySdk.builder().setMeterProvider(provider).build()
-            return MetricCapture(reader, sdk)
-        }
     }
 }

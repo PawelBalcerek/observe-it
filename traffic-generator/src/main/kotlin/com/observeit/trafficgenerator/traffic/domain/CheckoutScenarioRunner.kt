@@ -18,8 +18,8 @@ import kotlin.time.measureTimedValue
 @Service
 class CheckoutScenarioRunner(
     private val client: ObservedAppClient,
-    private val stepPacer: StepPacer = NoOpStepPacer,
-    private val counters: ScenarioExecutionCounters = ScenarioExecutionCounters(),
+    private val stepPacer: StepPacer,
+    private val counters: ScenarioExecutionCounters,
     private val trafficMetrics: TrafficMetrics,
 ) {
 

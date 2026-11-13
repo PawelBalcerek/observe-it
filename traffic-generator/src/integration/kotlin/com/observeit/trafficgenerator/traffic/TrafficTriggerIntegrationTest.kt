@@ -1,6 +1,11 @@
 package com.observeit.trafficgenerator.traffic
 
+import ch.qos.logback.classic.Level.DEBUG
+import ch.qos.logback.classic.Level.ERROR
+import ch.qos.logback.classic.Level.INFO
+import ch.qos.logback.classic.Level.WARN
 import com.observeit.trafficgenerator.IntegrationTest
+import com.observeit.trafficgenerator.test.LogCapture
 import com.observeit.trafficgenerator.test.shouldBeBadRequestError
 import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTrafficStatusResponse
 import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTriggerScenarioResponse
@@ -18,20 +23,21 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.RegisterExtension
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.FieldSource
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
 import org.springframework.test.web.client.MockRestServiceServer
-import org.springframework.web.client.RestClient
 
-@Import(TrafficTriggerIntegrationTest.MockServerConfig::class)
+@Import(TestObservedAppClientConfiguration::class)
 class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServer: MockRestServiceServer) :
     IntegrationTest() {
+
+    @JvmField
+    @RegisterExtension
+    final val logCapture = LogCapture(level = DEBUG)
 
     private val observedApp = ObservedAppMockFixture(mockServer)
     private val trafficApi by lazy { TrafficApiFixture(restTestClient) }
@@ -50,14 +56,14 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
     }
 
     @Test
-    fun `post trigger synchronously executes HAPPY_PATH scenario and increments counter`() {
+    fun `post trigger synchronously executes HAPPY_PATH scenario and emits correlated logs and metrics`() {
         // given
         val orderId = "order-happy"
         observedApp.expectCreateOrder(scenario = HAPPY_PATH, returnOrderId = orderId)
         observedApp.expectReserveOrder200(scenario = HAPPY_PATH, orderId = orderId)
         observedApp.expectPayOrder200(scenario = HAPPY_PATH, orderId = orderId)
         observedApp.expectShipOrder200(scenario = HAPPY_PATH, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = HAPPY_PATH, orderId = orderId, state = "SHIPPED")
+        observedApp.expectGetOrder200(scenario = HAPPY_PATH, orderId = orderId, state = State.SHIPPED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(HAPPY_PATH)
@@ -67,28 +73,62 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = HAPPY_PATH,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "SHIPPED",
+            finalState = State.SHIPPED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
         val status = trafficApi.getStatusAndExpect200()
         status shouldBe aTrafficStatusResponse(scenarioExecutionCounts = expectedCountsWithIncrement(HAPPY_PATH))
-        assertScenarioMetricsRecorded(scenario = HAPPY_PATH, finalState = "SHIPPED")
+        assertScenarioMetricsRecorded(scenario = HAPPY_PATH, finalState = State.SHIPPED)
+
+        // and
+        val expectedMdc = expectedMdc(scenario = HAPPY_PATH, orderId = orderId, customerId = response.customerId)
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order created",
+            keyValues = mapOf(Key.ORDER_ID to orderId, Key.ORDER_STATE to State.CREATED),
+            mdc = expectedMdc,
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order reserved",
+            keyValues = mapOf(Key.ORDER_STATE to State.RESERVED, Key.ORDER_PREVIOUS_STATE to State.CREATED),
+            mdc = expectedMdc,
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order paid",
+            keyValues = mapOf(
+                Key.ORDER_STATE to State.PAID,
+                Key.ORDER_PREVIOUS_STATE to State.RESERVED,
+                Key.PAYMENT_METHOD to Method.CREDIT_CARD,
+            ),
+            mdc = expectedMdc,
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order shipped",
+            keyValues = mapOf(
+                Key.ORDER_STATE to State.SHIPPED,
+                Key.ORDER_PREVIOUS_STATE to State.PAID,
+                "shipping.method" to Method.STANDARD,
+            ),
+            mdc = expectedMdc,
+        )
+        assertOrderRetrievedLog(state = State.SHIPPED, mdc = expectedMdc)
     }
 
     @Test
-    fun `post trigger synchronously executes LOW_STOCK_WARNING scenario and increments counter`() {
+    fun `post trigger synchronously executes LOW_STOCK_WARNING scenario and emits correlated logs and metrics`() {
         // given
         val orderId = "order-low-stock"
         observedApp.expectCreateOrder(scenario = LOW_STOCK_WARNING, returnOrderId = orderId)
         observedApp.expectReserveOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
         observedApp.expectPayOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
         observedApp.expectShipOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId, state = "SHIPPED")
+        observedApp.expectGetOrder200(scenario = LOW_STOCK_WARNING, orderId = orderId, state = State.SHIPPED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(LOW_STOCK_WARNING)
@@ -98,11 +138,9 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = LOW_STOCK_WARNING,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "SHIPPED",
+            finalState = State.SHIPPED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
@@ -110,16 +148,20 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(LOW_STOCK_WARNING),
         )
-        assertScenarioMetricsRecorded(scenario = LOW_STOCK_WARNING, finalState = "SHIPPED")
+        assertScenarioMetricsRecorded(scenario = LOW_STOCK_WARNING, finalState = State.SHIPPED)
+
+        // and
+        val expectedMdc = expectedMdc(scenario = LOW_STOCK_WARNING, orderId = orderId, customerId = response.customerId)
+        assertOrderRetrievedLog(state = State.SHIPPED, mdc = expectedMdc)
     }
 
     @Test
-    fun `post trigger synchronously executes OUT_OF_STOCK scenario and increments counter`() {
+    fun `post trigger synchronously executes OUT_OF_STOCK scenario and emits warning log and metrics`() {
         // given
         val orderId = "order-out-of-stock"
         observedApp.expectCreateOrder(scenario = OUT_OF_STOCK, returnOrderId = orderId)
         observedApp.expectReserveOrder422(scenario = OUT_OF_STOCK, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = OUT_OF_STOCK, orderId = orderId, state = "FAILED")
+        observedApp.expectGetOrder200(scenario = OUT_OF_STOCK, orderId = orderId, state = State.FAILED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(OUT_OF_STOCK)
@@ -129,27 +171,42 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = OUT_OF_STOCK,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "FAILED",
+            finalState = State.FAILED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
         val status = trafficApi.getStatusAndExpect200()
         status shouldBe aTrafficStatusResponse(scenarioExecutionCounts = expectedCountsWithIncrement(OUT_OF_STOCK))
-        assertScenarioMetricsRecorded(scenario = OUT_OF_STOCK, finalState = "FAILED")
+        assertScenarioMetricsRecorded(scenario = OUT_OF_STOCK, finalState = State.FAILED)
+
+        // and
+        val expectedMdc = expectedMdc(scenario = OUT_OF_STOCK, orderId = orderId, customerId = response.customerId)
+        logCapture.assertLogged(
+            level = WARN,
+            message = "Order reservation failed due to out of stock",
+            keyValues = mapOf(
+                Key.ERROR_TYPE to "OUT_OF_STOCK",
+                "inventory.sku" to "SKU-OUT-OF-STOCK",
+            ),
+            mdc = expectedMdc,
+        )
+        assertOrderRetrievedLog(state = State.FAILED, mdc = expectedMdc)
     }
 
     @Test
-    fun `post trigger synchronously executes PAYMENT_DECLINED scenario and increments counter`() {
+    fun `post trigger synchronously executes PAYMENT_DECLINED scenario and emits warning log and metrics`() {
         // given
         val orderId = "order-declined"
         observedApp.expectCreateOrder(scenario = PAYMENT_DECLINED, returnOrderId = orderId)
         observedApp.expectReserveOrder200(scenario = PAYMENT_DECLINED, orderId = orderId)
-        observedApp.expectPayOrder422(scenario = PAYMENT_DECLINED, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = PAYMENT_DECLINED, orderId = orderId, state = "FAILED")
+        observedApp.expectPayOrder422(
+            scenario = PAYMENT_DECLINED,
+            orderId = orderId,
+            detail = Message.PAYMENT_DECLINED,
+        )
+        observedApp.expectGetOrder200(scenario = PAYMENT_DECLINED, orderId = orderId, state = State.FAILED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(PAYMENT_DECLINED)
@@ -159,11 +216,9 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = PAYMENT_DECLINED,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "FAILED",
+            finalState = State.FAILED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
@@ -171,17 +226,34 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(PAYMENT_DECLINED),
         )
-        assertScenarioMetricsRecorded(scenario = PAYMENT_DECLINED, finalState = "FAILED")
+        assertScenarioMetricsRecorded(scenario = PAYMENT_DECLINED, finalState = State.FAILED)
+
+        // and
+        val expectedMdc = expectedMdc(scenario = PAYMENT_DECLINED, orderId = orderId, customerId = response.customerId)
+        logCapture.assertLogged(
+            level = WARN,
+            message = Message.PAYMENT_DECLINED,
+            keyValues = mapOf(
+                Key.ERROR_TYPE to "PAYMENT_DECLINED",
+                Key.PAYMENT_METHOD to Method.DECLINED_CARD,
+            ),
+            mdc = expectedMdc,
+        )
+        assertOrderRetrievedLog(state = State.FAILED, mdc = expectedMdc)
     }
 
     @Test
-    fun `post trigger synchronously executes PAYMENT_GATEWAY_TIMEOUT scenario and increments counter`() {
+    fun `post trigger synchronously executes PAYMENT_GATEWAY_TIMEOUT scenario and emits error log and metrics`() {
         // given
         val orderId = "order-timeout"
         observedApp.expectCreateOrder(scenario = PAYMENT_GATEWAY_TIMEOUT, returnOrderId = orderId)
         observedApp.expectReserveOrder200(scenario = PAYMENT_GATEWAY_TIMEOUT, orderId = orderId)
-        observedApp.expectPayOrder504(scenario = PAYMENT_GATEWAY_TIMEOUT, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = PAYMENT_GATEWAY_TIMEOUT, orderId = orderId, state = "FAILED")
+        observedApp.expectPayOrder504(
+            scenario = PAYMENT_GATEWAY_TIMEOUT,
+            orderId = orderId,
+            detail = Message.PAYMENT_GATEWAY_TIMEOUT,
+        )
+        observedApp.expectGetOrder200(scenario = PAYMENT_GATEWAY_TIMEOUT, orderId = orderId, state = State.FAILED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(PAYMENT_GATEWAY_TIMEOUT)
@@ -191,11 +263,9 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = PAYMENT_GATEWAY_TIMEOUT,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "FAILED",
+            finalState = State.FAILED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
@@ -203,17 +273,34 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(PAYMENT_GATEWAY_TIMEOUT),
         )
-        assertScenarioMetricsRecorded(scenario = PAYMENT_GATEWAY_TIMEOUT, finalState = "FAILED")
+        assertScenarioMetricsRecorded(scenario = PAYMENT_GATEWAY_TIMEOUT, finalState = State.FAILED)
+
+        // and
+        val expectedMdc = expectedMdc(
+            scenario = PAYMENT_GATEWAY_TIMEOUT,
+            orderId = orderId,
+            customerId = response.customerId,
+        )
+        logCapture.assertLogged(
+            level = ERROR,
+            message = Message.PAYMENT_GATEWAY_TIMEOUT,
+            keyValues = mapOf(
+                Key.ERROR_TYPE to "GATEWAY_TIMEOUT",
+                Key.PAYMENT_METHOD to Method.TIMEOUT_GATEWAY,
+            ),
+            mdc = expectedMdc,
+        )
+        assertOrderRetrievedLog(state = State.FAILED, mdc = expectedMdc)
     }
 
     @Test
-    fun `post trigger synchronously executes BUYER_CANCELLATION scenario and increments counter`() {
+    fun `post trigger synchronously executes BUYER_CANCELLATION scenario and emits cancellation log and metrics`() {
         // given
         val orderId = "order-cancellation"
         observedApp.expectCreateOrder(scenario = BUYER_CANCELLATION, returnOrderId = orderId)
         observedApp.expectReserveOrder200(scenario = BUYER_CANCELLATION, orderId = orderId)
         observedApp.expectCancelOrder200(scenario = BUYER_CANCELLATION, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = BUYER_CANCELLATION, orderId = orderId, state = "CANCELLED")
+        observedApp.expectGetOrder200(scenario = BUYER_CANCELLATION, orderId = orderId, state = State.CANCELLED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(BUYER_CANCELLATION)
@@ -223,11 +310,9 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = BUYER_CANCELLATION,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "CANCELLED",
+            finalState = State.CANCELLED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
@@ -235,11 +320,29 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(BUYER_CANCELLATION),
         )
-        assertScenarioMetricsRecorded(scenario = BUYER_CANCELLATION, finalState = "CANCELLED")
+        assertScenarioMetricsRecorded(scenario = BUYER_CANCELLATION, finalState = State.CANCELLED)
+
+        // and
+        val expectedMdc = expectedMdc(
+            scenario = BUYER_CANCELLATION,
+            orderId = orderId,
+            customerId = response.customerId,
+        )
+        logCapture.assertLogged(
+            level = INFO,
+            message = "Order cancelled",
+            keyValues = mapOf(
+                Key.ORDER_STATE to State.CANCELLED,
+                Key.ORDER_PREVIOUS_STATE to State.RESERVED,
+                "cancellation.reason" to "buyer cancellation request",
+            ),
+            mdc = expectedMdc,
+        )
+        assertOrderRetrievedLog(state = State.CANCELLED, mdc = expectedMdc)
     }
 
     @Test
-    fun `post trigger synchronously executes INVALID_STATE_TRANSITION scenario and increments counter`() {
+    fun `post trigger synchronously executes INVALID_STATE_TRANSITION scenario and emits warning log and metrics`() {
         // given
         val orderId = "order-invalid-transition"
         observedApp.expectCreateOrder(scenario = INVALID_STATE_TRANSITION, returnOrderId = orderId)
@@ -249,11 +352,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             orderId = orderId,
             reason = "cancelling before invalid pay",
         )
-        observedApp.expectPayOrder409(scenario = INVALID_STATE_TRANSITION, orderId = orderId)
+        observedApp.expectPayOrder409(
+            scenario = INVALID_STATE_TRANSITION,
+            orderId = orderId,
+            detail = Message.INVALID_PAY_TRANSITION,
+        )
         observedApp.expectGetOrder200(
             scenario = INVALID_STATE_TRANSITION,
             orderId = orderId,
-            state = "CANCELLED",
+            state = State.CANCELLED,
         )
 
         // when
@@ -264,11 +371,9 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = INVALID_STATE_TRANSITION,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "CANCELLED",
+            finalState = State.CANCELLED,
             success = true,
         )
-
-        // and
         observedApp.verify()
 
         // and
@@ -276,7 +381,24 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(
             scenarioExecutionCounts = expectedCountsWithIncrement(INVALID_STATE_TRANSITION),
         )
-        assertScenarioMetricsRecorded(scenario = INVALID_STATE_TRANSITION, finalState = "CANCELLED")
+        assertScenarioMetricsRecorded(scenario = INVALID_STATE_TRANSITION, finalState = State.CANCELLED)
+
+        // and
+        val expectedMdc = expectedMdc(
+            scenario = INVALID_STATE_TRANSITION,
+            orderId = orderId,
+            customerId = response.customerId,
+        )
+        logCapture.assertLogged(
+            level = WARN,
+            message = Message.INVALID_PAY_TRANSITION,
+            keyValues = mapOf(
+                Key.ERROR_TYPE to "INVALID_STATE_TRANSITION",
+                "order.attempted_action" to "pay",
+            ),
+            mdc = expectedMdc,
+        )
+        assertOrderRetrievedLog(state = State.CANCELLED, mdc = expectedMdc)
     }
 
     @Test
@@ -288,7 +410,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         observedApp.expectReserveOrder200(scenario = HAPPY_PATH, orderId = orderId)
         observedApp.expectPayOrder200(scenario = HAPPY_PATH, orderId = orderId)
         observedApp.expectShipOrder200(scenario = HAPPY_PATH, orderId = orderId)
-        observedApp.expectGetOrder200(scenario = HAPPY_PATH, orderId = orderId, state = "SHIPPED")
+        observedApp.expectGetOrder200(scenario = HAPPY_PATH, orderId = orderId, state = State.SHIPPED)
 
         // when
         val response = trafficApi.triggerScenarioAndExpect200(HAPPY_PATH)
@@ -298,13 +420,13 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             scenario = HAPPY_PATH,
             orderId = orderId,
             customerId = response.customerId,
-            finalState = "SHIPPED",
+            finalState = State.SHIPPED,
             success = true,
         )
 
         // and
         observedApp.verify()
-        assertScenarioMetricsRecorded(scenario = HAPPY_PATH, finalState = "SHIPPED")
+        assertScenarioMetricsRecorded(scenario = HAPPY_PATH, finalState = State.SHIPPED)
     }
 
     @ParameterizedTest(name = "{0}")
@@ -323,40 +445,86 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
     private fun expectedCountsWithIncrement(incrementedScenario: CheckoutScenario): Map<CheckoutScenario, Long> =
         baselineCounts + (incrementedScenario to baselineCounts.getValue(incrementedScenario) + 1L)
 
+    private fun expectedMdc(scenario: CheckoutScenario, orderId: String, customerId: String): Map<String, String> =
+        mapOf(
+            Key.CHECKOUT_SCENARIO to scenario.name,
+            Key.ORDER_ID to orderId,
+            Key.CUSTOMER_ID to customerId,
+        )
+
+    private fun assertOrderRetrievedLog(state: String, mdc: Map<String, String>) {
+        logCapture.assertLogged(
+            level = INFO,
+            message = Message.ORDER_RETRIEVED,
+            keyValues = mapOf(
+                Key.ORDER_STATE to state,
+                Key.ORDER_TOTAL_AMOUNT to DEFAULT_TOTAL_AMOUNT,
+                Key.ORDER_CURRENCY to CURRENCY_USD,
+                Key.ORDER_ITEM_COUNT to 1L,
+            ),
+            mdc = mdc,
+        )
+    }
+
     private fun assertScenarioMetricsRecorded(scenario: CheckoutScenario, finalState: String) {
         metricCapture.assertCounterIncremented(
             name = "traffic.scenarios.executed",
             unit = "{scenario}",
             delta = 1L,
             attributes = mapOf(
-                "checkout.scenario" to scenario.name,
-                "order.state" to finalState,
+                Key.CHECKOUT_SCENARIO to scenario.name,
+                Key.ORDER_STATE to finalState,
             ),
         )
         val durationPoint = metricCapture.assertHistogramRecorded(
             name = "traffic.scenario.duration",
             unit = "ms",
             count = 1L,
-            attributes = mapOf("checkout.scenario" to scenario.name),
+            attributes = mapOf(Key.CHECKOUT_SCENARIO to scenario.name),
         )
         durationPoint.sum shouldBeGreaterThanOrEqualTo 0.0
     }
 
-    @TestConfiguration
-    class MockServerConfig {
-        private val builder = RestClient.builder().baseUrl("http://localhost:8080")
-        private val mockServer = MockRestServiceServer.bindTo(builder).build()
-        private val client = builder.build()
-
-        @Bean
-        fun mockServer(): MockRestServiceServer = mockServer
-
-        @Bean
-        @Primary
-        fun testObservedAppRestClient(): RestClient = client
-    }
-
     companion object {
+        private object Key {
+            const val CHECKOUT_SCENARIO = "checkout.scenario"
+            const val ORDER_ID = "order.id"
+            const val CUSTOMER_ID = "customer.id"
+            const val ORDER_STATE = "order.state"
+            const val ORDER_PREVIOUS_STATE = "order.previous_state"
+            const val ORDER_TOTAL_AMOUNT = "order.total_amount"
+            const val ORDER_CURRENCY = "order.currency"
+            const val ORDER_ITEM_COUNT = "order.item_count"
+            const val PAYMENT_METHOD = "payment.method"
+            const val ERROR_TYPE = "error.type"
+        }
+
+        private object State {
+            const val CREATED = "CREATED"
+            const val RESERVED = "RESERVED"
+            const val PAID = "PAID"
+            const val SHIPPED = "SHIPPED"
+            const val CANCELLED = "CANCELLED"
+            const val FAILED = "FAILED"
+        }
+
+        private object Method {
+            const val CREDIT_CARD = "CREDIT_CARD"
+            const val DECLINED_CARD = "DECLINED_CARD"
+            const val TIMEOUT_GATEWAY = "TIMEOUT_GATEWAY"
+            const val STANDARD = "STANDARD"
+        }
+
+        private object Message {
+            const val ORDER_RETRIEVED = "Order retrieved"
+            const val PAYMENT_DECLINED = "Payment declined for method DECLINED_CARD"
+            const val PAYMENT_GATEWAY_TIMEOUT = "Payment gateway timed out"
+            const val INVALID_PAY_TRANSITION = "Cannot pay order in CANCELLED state"
+        }
+
+        private const val CURRENCY_USD = "USD"
+        private const val DEFAULT_TOTAL_AMOUNT = 10.0
+
         @JvmStatic
         val invalidScenarios = listOf(
             Arguments.of(

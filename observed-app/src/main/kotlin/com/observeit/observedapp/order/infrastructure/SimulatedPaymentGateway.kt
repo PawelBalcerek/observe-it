@@ -16,7 +16,7 @@ import java.util.concurrent.TimeoutException
 import kotlin.time.measureTime
 
 @Component
-class SimulatedPaymentGateway(private val timeoutDelayMs: Long = GATEWAY_TIMEOUT_DELAY_MS) : PaymentGateway {
+class SimulatedPaymentGateway : PaymentGateway {
 
     override fun processPayment(
         orderId: String,
@@ -35,7 +35,7 @@ class SimulatedPaymentGateway(private val timeoutDelayMs: Long = GATEWAY_TIMEOUT
 
             TIMEOUT_GATEWAY -> {
                 val elapsed = measureTime {
-                    val executor = CompletableFuture.delayedExecutor(timeoutDelayMs, MILLISECONDS)
+                    val executor = CompletableFuture.delayedExecutor(GATEWAY_TIMEOUT_DELAY_MS, MILLISECONDS)
                     CompletableFuture.runAsync({}, executor).join()
                 }
                 val latencyMs = elapsed.inWholeMilliseconds

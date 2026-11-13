@@ -66,6 +66,25 @@ class PayOrderIntegrationTest : IntegrationTest() {
                 "customer.id" to "customerId",
             ),
         )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "PAID",
+            ),
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 50.0,
+            attributes = mapOf(
+                "payment.method" to "CREDIT_CARD",
+                "payment.outcome" to "SUCCESS",
+            ),
+        )
     }
 
     @ParameterizedTest(name = "{0}")
@@ -136,6 +155,12 @@ class PayOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     @Test
@@ -174,6 +199,31 @@ class PayOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "FAILED",
+            ),
+        )
+        metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            sum = 50.0,
+            attributes = mapOf(
+                "payment.method" to "DECLINED_CARD",
+                "payment.outcome" to "DECLINED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "PAYMENT_DECLINED"),
+        )
     }
 
     @Test
@@ -213,6 +263,31 @@ class PayOrderIntegrationTest : IntegrationTest() {
         val latencyMs = logEvent.keyValuePairs.first { it.key == "payment.latency_ms" }.value as Long
         (latencyMs >= 1000L) shouldBe true
         logEvent.throwableProxy.shouldNotBeNull()
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "RESERVED",
+                "order.state" to "FAILED",
+            ),
+        )
+        val paymentPoint = metricCapture.assertHistogramRecorded(
+            name = "order.payment.duration",
+            unit = "ms",
+            count = 1L,
+            attributes = mapOf(
+                "payment.method" to "TIMEOUT_GATEWAY",
+                "payment.outcome" to "TIMEOUT",
+            ),
+        )
+        (paymentPoint.sum >= 1000.0) shouldBe true
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "GATEWAY_TIMEOUT"),
+        )
     }
 
     companion object {

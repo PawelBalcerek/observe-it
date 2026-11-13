@@ -65,6 +65,24 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
                 "customer.id" to "customerId",
             ),
         )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "RESERVED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "sku",
+                "inventory.outcome" to "RESERVED",
+            ),
+        )
     }
 
     @Test
@@ -96,6 +114,24 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "RESERVED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "SKU-LOW-STOCK",
+                "inventory.outcome" to "LOW_STOCK_WARNING",
+            ),
+        )
     }
 
     @Test
@@ -148,6 +184,12 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     @Test
@@ -184,5 +226,29 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "CREATED",
+                "order.state" to "FAILED",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.inventory.reservations",
+            unit = "{reservation}",
+            delta = 1L,
+            attributes = mapOf(
+                "inventory.sku" to "SKU-OUT-OF-STOCK",
+                "inventory.outcome" to "OUT_OF_STOCK",
+            ),
+        )
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "OUT_OF_STOCK"),
+        )
     }
 }

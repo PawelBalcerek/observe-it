@@ -35,7 +35,7 @@ class OrderServiceTest {
 
     @JvmField
     @RegisterExtension
-    val metricCapture = MetricCapture.isolated()
+    val metricCapture = MetricCapture()
 
     private val repository = InMemoryOrderRepository()
     private val paymentGateway = FakePaymentGateway()
@@ -407,10 +407,11 @@ class OrderServiceTest {
         }
 
         // then
-        exception shouldBe PaymentGatewayTimeoutException(paymentMethod = TIMEOUT_GATEWAY, latencyMs = 1500L)
-
-        // and
-        exception.cause.shouldNotBeNull()
+        exception shouldBe PaymentGatewayTimeoutException(
+            paymentMethod = TIMEOUT_GATEWAY,
+            latencyMs = 1500L,
+            cause = exception.cause.shouldNotBeNull(),
+        )
 
         // and
         repository.findById(existingOrder.id) shouldBe anOrder(id = existingOrder.id, state = FAILED)

@@ -21,7 +21,8 @@ Skip anything already enforced by `./gradlew check` (Ktlint and Detekt in
 
 Run all checks on the diff during review:
 
-- **Callers**: for every declaration the diff adds, grep for a caller (`docs/agents/architecture.md` §6).
+- **Callers**: for every declaration and default parameter value the diff adds in `src/main`, grep for a caller in
+  `src/main` that uses the declaration or omits the defaulted parameter (`docs/agents/architecture.md` §6).
 - **Versions**: for every dependency, plugin, container image, or GitHub Action added or bumped in the diff, verify it
   uses the latest compatible stable release (`docs/agents/architecture.md` §6).
 - **Suppressions**: list every `@Suppress` the diff adds and judge whether the code should change instead
