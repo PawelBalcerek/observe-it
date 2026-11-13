@@ -226,7 +226,7 @@ private data class GetOrderResponsePayload(
     val state: String,
     val totalAmount: BigDecimal,
     val currency: String,
-    val items: List<GetOrderItemPayload> = emptyList(),
+    val items: List<GetOrderItemPayload>,
 )
 
 private data class GetOrderItemPayload(

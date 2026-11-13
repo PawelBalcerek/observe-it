@@ -4,7 +4,6 @@ import com.observeit.observedapp.correlation.CorrelationContext
 import com.observeit.observedapp.order.domain.InventoryOutcome.LOW_STOCK_WARNING
 import com.observeit.observedapp.order.domain.InventoryOutcome.OUT_OF_STOCK
 import com.observeit.observedapp.order.domain.InventoryOutcome.RESERVED
-import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.domain.OrderState.FAILED
 import com.observeit.observedapp.order.domain.OrderTelemetry.ErrorType
 import com.observeit.observedapp.order.domain.OrderTelemetry.Key
@@ -31,7 +30,6 @@ class OrderService(
             id = orderId,
             customerId = customerId,
             items = items,
-            state = CREATED,
         )
 
         val saved = orderRepository.save(order)

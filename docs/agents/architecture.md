@@ -143,10 +143,14 @@ Keep the qualifier where it carries meaning the bare name loses:
 
 ## 6. Dead Code, Dependency Versions & Sources
 
-- **Every declaration has a caller**: Each class, function, property, `@Bean`, and fixture helper a PR adds is called
-  from `main` (or, for `testFixtures`, from a test) in the same PR. Add a declaration in the ticket that first uses it,
-  not ahead of time. Detekt catches unused *private* members; PR code review checks public and internal declarations for
-  callers.
+- **Every declaration and default parameter has a caller**: Each class, function, property, `@Bean`, and fixture helper
+  a PR adds is called from `main` (or, for `testFixtures`, from a test) in the same PR, and every default parameter
+  value in `main` is omitted by at least one call site in `main` (or declares a non-bean value default on a Spring
+  component constructor, such as `Random = Random.Default` or `@Value(...) capacity: Int = DEFAULT_CAPACITY`). Spring
+  `@Service`, `@Component`, and `@Repository` constructors declare their bean collaborators as required parameters
+  without test-only default values (`= NoOp*`, `= ScenarioExecutionCounters()`, `= null`), and test doubles or no-op
+  stubs live in `src/test` or `src/testFixtures` rather than `src/main`. Detekt catches unused *private* members; PR
+  code review checks public and internal declarations and default parameter values for `main` callers.
 - **Latest stable versions on new dependencies & tooling**: Whenever adding a new dependency, plugin, container image,
   or GitHub Action (`gradle/libs.versions.toml`, `package.json`, `Dockerfile` / `docker-compose.yml`,
   `.github/workflows/*.yml`), query the live registry (`npm view <pkg> version`,

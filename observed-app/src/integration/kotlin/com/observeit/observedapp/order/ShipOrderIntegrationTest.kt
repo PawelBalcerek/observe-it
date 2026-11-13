@@ -59,6 +59,15 @@ class ShipOrderIntegrationTest : IntegrationTest() {
                 "customer.id" to "customerId",
             ),
         )
+        metricCapture.assertCounterIncremented(
+            name = "order.state.transitions",
+            unit = "{transition}",
+            delta = 1L,
+            attributes = mapOf(
+                "order.previous_state" to "PAID",
+                "order.state" to "SHIPPED",
+            ),
+        )
     }
 
     @ParameterizedTest(name = "{0}")
@@ -129,6 +138,12 @@ class ShipOrderIntegrationTest : IntegrationTest() {
             ),
         )
         logEvent.throwableProxy shouldBe null
+        metricCapture.assertCounterIncremented(
+            name = "order.errors",
+            unit = "{error}",
+            delta = 1L,
+            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
+        )
     }
 
     companion object {

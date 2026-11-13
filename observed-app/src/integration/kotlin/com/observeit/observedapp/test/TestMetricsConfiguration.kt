@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Primary
 class TestMetricsConfiguration {
 
     @Bean
+    fun metricCapture(): MetricCapture = MetricCapture()
+
+    @Bean
     @Primary
-    fun openTelemetry(): OpenTelemetry = MetricCapture.sharedOpenTelemetry
+    fun openTelemetry(metricCapture: MetricCapture): OpenTelemetry = metricCapture.openTelemetry
 }

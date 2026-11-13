@@ -62,13 +62,13 @@ class OrderControllerAdvice {
     @ExceptionHandler(PaymentGatewayTimeoutException::class)
     fun handlePaymentGatewayTimeoutException(exception: PaymentGatewayTimeoutException): ProblemDetail {
         logger.atError()
-            .setCause(exception.cause ?: exception)
+            .setCause(exception.cause)
             .addKeyValue(Key.ERROR_TYPE, ErrorType.GATEWAY_TIMEOUT)
             .addKeyValue(Key.PAYMENT_METHOD, exception.paymentMethod.name)
             .addKeyValue(Key.PAYMENT_LATENCY_MS, exception.latencyMs)
             .log("Payment gateway timed out for method ${exception.paymentMethod.name}")
 
-        val detail = exception.message
+        val detail = exception.message ?: GATEWAY_TIMEOUT.reasonPhrase
         return problemDetail(GATEWAY_TIMEOUT, detail)
     }
 

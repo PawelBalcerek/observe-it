@@ -32,8 +32,8 @@ writing or modifying any production code or build/CI dependency. See `docs/agent
 
 Unit tests (`src/test/kotlin`), black-box integration tests (`src/integration/kotlin`), and shared fixtures
 (`src/testFixtures/kotlin`) using `given` / `when` / `then` / `and` blocks, minimal-override `*Fixtures` with
-self-describing dummy defaults, `LogCapture` and `*ApiFixture` helpers, fakes over mocks, Kotest assertions, and
-Awaitility. Read before writing or modifying any test or test fixture. See `docs/agents/testing.md`.
+self-describing dummy defaults, `LogCapture`, `MetricCapture`, and `*ApiFixture` helpers, fakes over mocks, Kotest
+assertions, and Awaitility. Read before writing or modifying any test or test fixture. See `docs/agents/testing.md`.
 
 ### Code formatting & static analysis (ktlint & detekt)
 

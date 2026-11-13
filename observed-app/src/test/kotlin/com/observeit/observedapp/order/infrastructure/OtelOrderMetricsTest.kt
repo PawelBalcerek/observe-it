@@ -18,7 +18,7 @@ class OtelOrderMetricsTest {
 
     @JvmField
     @RegisterExtension
-    val metricCapture = MetricCapture.isolated()
+    val metricCapture = MetricCapture()
 
     private val repository = InMemoryOrderRepository()
     private val metrics = OtelOrderMetrics(metricCapture.openTelemetry, repository)
@@ -129,13 +129,19 @@ class OtelOrderMetricsTest {
     }
 
     @Test
-    fun `reads repository size gauge callback from repository count`() {
+    fun `reads initial repository size gauge callback from empty repository`() {
         // then
         metricCapture.assertGaugeValue(
             name = "order.repository.size",
             unit = "{order}",
             value = 0L,
         )
+    }
+
+    @Test
+    fun `reads updated repository size gauge callback when orders are saved`() {
+        // given
+        metricCapture.drainAndReset()
 
         // when
         repository.save(anOrder(id = "order-1"))

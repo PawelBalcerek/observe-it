@@ -47,7 +47,6 @@ class TrafficWorkerCoordinator(
     private val runner: CheckoutScenarioRunner,
     private val selector: ScenarioSelector,
     private val properties: TrafficProperties,
-    private val iterationDelayMs: Long? = null,
     private val trafficMetrics: TrafficMetrics,
 ) : SmartLifecycle,
     TrafficWorkerControl {
@@ -94,7 +93,6 @@ class TrafficWorkerCoordinator(
                         generation = nextGeneration,
                         runner = runner,
                         selector = selector,
-                        fixedDelayMs = iterationDelayMs,
                         rateSupplier = { rate.get().ordersPerSecond },
                         logger = logger,
                     )
@@ -243,7 +241,6 @@ class TrafficWorkerCoordinator(
         val generation: Long,
         private val runner: CheckoutScenarioRunner,
         private val selector: ScenarioSelector,
-        private val fixedDelayMs: Long?,
         private val rateSupplier: () -> Double,
         private val logger: Logger,
     ) {
@@ -307,8 +304,7 @@ class TrafficWorkerCoordinator(
             }
         }
 
-        private fun computeDelayMs(): Long =
-            fixedDelayMs ?: max(MIN_ITERATION_DELAY_MS, (MILLIS_PER_SECOND / rateSupplier()).toLong())
+        private fun computeDelayMs(): Long = max(MIN_ITERATION_DELAY_MS, (MILLIS_PER_SECOND / rateSupplier()).toLong())
 
         fun stop() {
             if (isRunning.compareAndSet(true, false)) {
@@ -332,8 +328,8 @@ class TrafficWorkerCoordinator(
             }
         }
 
-        fun awaitTermination(timeoutMs: Long = STOP_JOIN_TIMEOUT_MS): Boolean = try {
-            terminationLatch.await(timeoutMs, MILLISECONDS)
+        fun awaitTermination(): Boolean = try {
+            terminationLatch.await(STOP_JOIN_TIMEOUT_MS, MILLISECONDS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
             false

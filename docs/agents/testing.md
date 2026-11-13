@@ -7,35 +7,43 @@ Each service module configures three test source sets via `conventions.spring`:
 - **Shared Test Fixtures (`src/testFixtures/kotlin`)**:
   - Enabled via Gradle's `java-test-fixtures` plugin and shared across both unit and integration tests.
   - Houses domain/DTO `*Fixtures` (Object Mothers), reusable HTTP `*ApiFixture` clients, `ProblemDetail` assertion
-    helpers (`ProblemDetailFixtures`), and log capture helpers (`LogCapture`).
+    helpers (`ProblemDetailFixtures`), and telemetry capture helpers (`LogCapture` and `MetricCapture`).
   - Keep internal helper properties/functions `private` and prune unused fixture helpers.
 - **Unit Tests (`src/test/kotlin`)**:
   - Fast, isolated, and decoupled from Spring container startup or network I/O.
-  - Verify domain state transitions and invariants, service orchestration and structured log emission, adapter mechanics
-    (such as capacity eviction and concurrency), and filter edge cases.
+  - Verify domain state transitions and invariants, service orchestration and structured log/metric emission, adapter
+    mechanics (such as capacity eviction and concurrency), and filter edge cases.
   - Verify `@RestControllerAdvice` HTTP status codes, `ProblemDetail` payloads, and error telemetry end-to-end in
     integration tests rather than unit tests.
 - **Integration Tests (`src/integration/kotlin`)**:
   - Configured via `com.coditory.integration-test` (`./gradlew integrationTest`, wired into `./gradlew check`).
-  - Extend the `IntegrationTest` base class (`@SpringBootTest(webEnvironment = RANDOM_PORT)`).
+  - Extend the `IntegrationTest` base class (`@SpringBootTest(webEnvironment = RANDOM_PORT)`), which imports
+    `TestMetricsConfiguration` (registering per-context `MetricCapture` and `@Primary OpenTelemetry` beans) and resets
+    `metricCapture` in `@BeforeEach` and `@AfterEach`.
   - Verify the wired HTTP contract (including request validation `ProblemDetail` responses) and emitted telemetry as a
-    **black box** through `*ApiFixture` / `RestTestClient` and `LogCapture`.
-  - Interact strictly through the HTTP interface and captured logs—keep each integration test scoped to its feature's
-    endpoints, and test cross-cutting servlet filters once in dedicated filter/health tests rather than re-testing
-    filter cleanup across every endpoint test.
+    **black box** through `*ApiFixture` / `RestTestClient`, `LogCapture`, and `MetricCapture`.
+  - Interact strictly through the HTTP interface and captured telemetry—keep each integration test scoped to its
+    feature's endpoints, reset mutable state in `@BeforeEach` / `@AfterEach` or assert against baseline deltas instead
+    of `@DirtiesContext` (enforced by Detekt `ForbiddenAnnotation`), and test cross-cutting servlet filters once in
+    dedicated filter/health tests rather than re-testing filter cleanup across every endpoint test.
   - **Ascending HTTP status order**: Within each endpoint integration test class, order test methods by ascending HTTP
     response status (`2xx` → `4xx` → `5xx`, e.g., `200`/`201` → `400` → `404` → `409` → `422` → `504`).
   - **Outbound client adapter tests**: Group test methods by client method (in the port's declaration order), then by
     ascending HTTP status within each group. Cover every status the downstream service returns for that call, plus
     exactly one unhandled status (`500`) per client method.
 - **One test class per subject**: Do not test the same class (`CheckoutScenarioRunner`) in both a unit test and an
-  integration test. When a service is already exercised directly by an integration test, skip a duplicate unit test for
-  it. Skip tests that only restate a declaration (enum entries, constant tables); test the invariant a declaration
-  encodes (e.g., scenario weights sum to 1) where the code relying on it lives.
+  integration test, and do not split HTTP responses, `LogCapture` structured logs, and `MetricCapture` metrics for the
+  same endpoint or scenario flow into parallel integration test classes (`*MetricsIntegrationTest`). Each endpoint or
+  scenario flow integration test class asserts the HTTP contract, structured logs, and emitted metrics together inside
+  the same `@Test` methods. When a service is already exercised directly by an integration test, skip a duplicate unit
+  test for it. Skip tests that only restate a declaration (enum entries, constant tables); test the invariant a
+  declaration encodes (e.g., scenario weights sum to 1) where the code relying on it lives.
 
 ## 2. Fakes over Mocks
 
-- Wire **real in-memory adapters** (fakes) into service unit tests rather than mocking domain ports.
+- Wire **real in-memory or OpenTelemetry adapters** (`InMemoryOrderRepository`, `OtelOrderMetrics`,
+  `OtelTrafficMetrics` backed by `MetricCapture().openTelemetry`) and domain fakes (`FakePaymentGateway`) into service
+  and coordinator unit tests rather than mocking domain ports or defining no-op stubs.
 - Do not use mocking frameworks (Mockito, MockK) for domain repositories or collaborators.
 
 ## 3. Minimal-Override `*Fixtures` with Self-Describing Dummy Defaults
@@ -70,7 +78,7 @@ object ItemFixtures {
 }
 ```
 
-## 4. Reusable HTTP (`*ApiFixture`), `ProblemDetail` & Telemetry (`LogCapture`) Fixtures
+## 4. Reusable HTTP (`*ApiFixture`), `ProblemDetail` & Telemetry (`LogCapture` & `MetricCapture`) Fixtures
 
 Keep test methods focused on behavior rather than infrastructure plumbing:
 
@@ -85,6 +93,11 @@ Keep test methods focused on behavior rather than infrastructure plumbing:
   structured key-value pairs, and `MDC` entries in a single call with
   `logCapture.assertLogged(level, message, keyValues, mdc)`. Do not add redundant manual `MDC.get(...)` assertions
   alongside `assertLogged`.
+- **`MetricCapture` Fixture**: Each `MetricCapture()` instance owns an isolated delta `InMemoryMetricReader` and
+  `OpenTelemetrySdk` without global static state. In unit tests, register `MetricCapture()` via
+  `@JvmField @RegisterExtension` and pass `metricCapture.openTelemetry` to the adapter under test; in `@SpringBootTest`
+  integration tests, use the per-context `metricCapture` bean autowired on `IntegrationTest` and verify counters,
+  histograms, and gauges via `assertCounterIncremented`, `assertHistogramRecorded`, and `assertGaugeValue`.
 
 ## 5. Given / When / Then Structure, Parameterized Validation, Kotest & Awaitility
 

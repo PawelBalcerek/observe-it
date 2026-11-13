@@ -2,7 +2,6 @@ package com.observeit.trafficgenerator.test
 
 import io.kotest.assertions.fail
 import io.kotest.matchers.shouldBe
-import io.opentelemetry.api.metrics.Meter
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.metrics.data.DoublePointData
@@ -24,19 +23,17 @@ import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtensionContext
 import java.util.concurrent.CopyOnWriteArrayList
 
-class MetricCapture(
-    private val metricReader: InMemoryMetricReader = InMemoryMetricReader.createDelta(),
-    meterProvider: SdkMeterProvider =
-        SdkMeterProvider.builder().registerMetricReader(metricReader).build(),
-    val openTelemetry: OpenTelemetrySdk =
-        OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build(),
-) : BeforeEachCallback,
+class MetricCapture :
+    BeforeEachCallback,
     AfterEachCallback {
 
-    private val collectedMetrics = CopyOnWriteArrayList<MetricData>()
+    private val metricReader: InMemoryMetricReader = InMemoryMetricReader.createDelta()
+    private val meterProvider: SdkMeterProvider =
+        SdkMeterProvider.builder().registerMetricReader(metricReader).build()
+    val openTelemetry: OpenTelemetrySdk =
+        OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build()
 
-    val meter: Meter
-        get() = openTelemetry.getMeter(DEFAULT_INSTRUMENTATION_SCOPE)
+    private val collectedMetrics = CopyOnWriteArrayList<MetricData>()
 
     override fun beforeEach(context: ExtensionContext) {
         drainAndReset()
@@ -62,22 +59,6 @@ class MetricCapture(
         when (point) {
             is LongPointData -> point.value shouldBe delta
             is DoublePointData -> point.value shouldBe delta.toDouble()
-            else -> fail("Point for '$name' was not a numeric point data: ${point::class.simpleName}")
-        }
-        return point
-    }
-
-    fun assertCounterIncremented(
-        name: String,
-        unit: String? = null,
-        delta: Double,
-        attributes: Map<String, Any?> = emptyMap(),
-    ): PointData {
-        val metric = findMetric(name, unit)
-        val point = findMatchingPoint(name, metric.type, attributes)
-        when (point) {
-            is DoublePointData -> point.value shouldBe delta
-            is LongPointData -> point.value.toDouble() shouldBe delta
             else -> fail("Point for '$name' was not a numeric point data: ${point::class.simpleName}")
         }
         return point
@@ -183,9 +164,5 @@ class MetricCapture(
             fail("No point for metric '$metricName' matched attributes $expectedAttributes. Recorded: $recorded")
         }
         return matching.last()
-    }
-
-    private companion object {
-        const val DEFAULT_INSTRUMENTATION_SCOPE = "observe-it"
     }
 }

@@ -19,7 +19,6 @@ import com.observeit.observedapp.order.domain.OrderState.SHIPPED
 import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
 import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
 import com.observeit.observedapp.test.LogCapture
-import com.observeit.observedapp.test.MetricCapture
 import com.observeit.observedapp.test.shouldBeConflictError
 import com.observeit.observedapp.test.shouldBeGatewayTimeoutError
 import com.observeit.observedapp.test.shouldBeUnprocessableEntityError
@@ -33,10 +32,6 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
     @JvmField
     @RegisterExtension
     final val logCapture = LogCapture(level = DEBUG)
-
-    @JvmField
-    @RegisterExtension
-    final val metricCapture = MetricCapture()
 
     private val orderApi by lazy { OrderApiFixture(restTestClient) }
 

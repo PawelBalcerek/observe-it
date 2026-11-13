@@ -21,6 +21,11 @@ potential-bugs:
 style:
   AbstractClassCanBeConcreteClass:
     active: false
+  ForbiddenAnnotation:
+    active: true
+    annotations:
+      - value: 'org.springframework.test.annotation.DirtiesContext'
+        reason: 'Reset state in @BeforeEach/@AfterEach or assert against baseline deltas instead of rebuilding the Spring context.'
   ForbiddenMethodCall:
     active: true
     methods:

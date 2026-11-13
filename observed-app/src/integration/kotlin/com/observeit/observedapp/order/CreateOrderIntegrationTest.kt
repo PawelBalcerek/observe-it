@@ -52,6 +52,12 @@ class CreateOrderIntegrationTest : IntegrationTest() {
                 "customer.id" to "customerId",
             ),
         )
+        metricCapture.assertCounterIncremented(
+            name = "orders.created",
+            unit = "{order}",
+            delta = 1L,
+            attributes = mapOf("order.currency" to "USD"),
+        )
     }
 
     @ParameterizedTest(name = "{0}")
