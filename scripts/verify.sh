@@ -7,7 +7,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-IMAGE_TAG="${OBSERVE_IT_IMAGE_TAG:-0.2.0}"
+IMAGE_TAG="${OBSERVE_IT_IMAGE_TAG:-0.3.0}"
 GHCR_PREFIX="${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}"
 
 echo "========================================================================"

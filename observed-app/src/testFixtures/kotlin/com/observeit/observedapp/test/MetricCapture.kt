@@ -28,7 +28,7 @@ class MetricCapture :
     AfterEachCallback {
 
     private val metricReader: InMemoryMetricReader = InMemoryMetricReader.createDelta()
-    private val meterProvider: SdkMeterProvider =
+    val meterProvider: SdkMeterProvider =
         SdkMeterProvider.builder().registerMetricReader(metricReader).build()
     val openTelemetry: OpenTelemetrySdk =
         OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build()
