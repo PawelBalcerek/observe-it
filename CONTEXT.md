@@ -30,3 +30,7 @@ from the Observed App and Traffic Generator are stored and queried. _Avoid_: Log
 **SS4O Metrics Index**: The OpenSearch index conforming to the Simple Schema for Observability where OTLP metric data
 points from the Observed App and Traffic Generator are stored and queried. _Avoid_: Metrics bucket, metrics table,
 Prometheus store
+
+**SS4O Traces Index**: The OpenSearch index conforming to the Simple Schema for Observability where OTLP trace span
+documents from the Observed App and Traffic Generator are stored and queried. _Avoid_: Trace bucket, span table,
+Jaeger store
