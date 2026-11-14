@@ -1,6 +1,5 @@
 package com.observeit.trafficgenerator.traffic
 
-import ch.qos.logback.classic.Level.INFO
 import com.observeit.trafficgenerator.IntegrationTest
 import com.observeit.trafficgenerator.test.LogCapture
 import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTrafficStatusResponse
@@ -50,14 +49,7 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
         metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 3L)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Traffic generator resumed",
-            keyValues = mapOf(
-                "traffic.running" to true,
-                "traffic.paused" to false,
-            ),
-        )
+        logCapture.assertTrafficResumedLog()
     }
 
     @Test
@@ -80,14 +72,7 @@ class TrafficPauseResumeIntegrationTest : IntegrationTest() {
         metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 0L)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Traffic generator paused",
-            keyValues = mapOf(
-                "traffic.running" to false,
-                "traffic.paused" to true,
-            ),
-        )
+        logCapture.assertTrafficPausedLog()
     }
 
     @Test

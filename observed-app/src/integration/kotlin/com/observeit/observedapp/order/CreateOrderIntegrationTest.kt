@@ -1,12 +1,13 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level.INFO
 import com.observeit.observedapp.IntegrationTest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderLineItemRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderResponse
 import com.observeit.observedapp.order.api.CreateOrderRequest
 import com.observeit.observedapp.order.api.OrderApiFixture
+import com.observeit.observedapp.order.assertOrderCreatedLog
+import com.observeit.observedapp.order.assertOrdersCreatedIncremented
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeValidationError
 import io.kotest.matchers.shouldBe
@@ -37,27 +38,11 @@ class CreateOrderIntegrationTest : IntegrationTest() {
         response shouldBe aCreateOrderResponse(orderId = response.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order created",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "happy-path",
-                "order.id" to response.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertOrderCreatedLog(
+            orderId = response.orderId,
+            checkoutScenario = "happy-path",
         )
-        metricCapture.assertCounterIncremented(
-            name = "orders.created",
-            unit = "{order}",
-            delta = 1L,
-            attributes = mapOf("order.currency" to "USD"),
-        )
+        metricCapture.assertOrdersCreatedIncremented()
     }
 
     @ParameterizedTest(name = "{0}")

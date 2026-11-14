@@ -1,15 +1,26 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level.DEBUG
-import ch.qos.logback.classic.Level.INFO
-import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderLineItemRequest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aReserveOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
+import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertInventoryReservationIncremented
+import com.observeit.observedapp.order.assertInventoryReservedLog
+import com.observeit.observedapp.order.assertLowStockWarningLog
+import com.observeit.observedapp.order.assertOrderErrorIncremented
+import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderReservedLog
+import com.observeit.observedapp.order.assertOutOfStockLog
+import com.observeit.observedapp.order.assertStateTransitionIncremented
+import com.observeit.observedapp.order.domain.InventoryOutcome
+import com.observeit.observedapp.order.domain.InventoryOutcome.LOW_STOCK_WARNING
+import com.observeit.observedapp.order.domain.InventoryOutcome.OUT_OF_STOCK
 import com.observeit.observedapp.order.domain.OrderState.CANCELLED
+import com.observeit.observedapp.order.domain.OrderState.CREATED
 import com.observeit.observedapp.order.domain.OrderState.FAILED
+import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeConflictError
 import com.observeit.observedapp.test.shouldBeNotFoundError
@@ -38,51 +49,10 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         response shouldBe aReserveOrderResponse(orderId = created.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = DEBUG,
-            message = "Inventory reserved for sku (1/100)",
-            keyValues = mapOf(
-                "inventory.sku" to "sku",
-                "inventory.requested_quantity" to 1L,
-                "inventory.available_quantity" to 100L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "happy-path",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order reserved",
-            keyValues = mapOf(
-                "order.state" to "RESERVED",
-                "order.previous_state" to "CREATED",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "happy-path",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "CREATED",
-                "order.state" to "RESERVED",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.inventory.reservations",
-            unit = "{reservation}",
-            delta = 1L,
-            attributes = mapOf(
-                "inventory.sku" to "sku",
-                "inventory.outcome" to "RESERVED",
-            ),
-        )
+        logCapture.assertInventoryReservedLog(orderId = created.orderId, checkoutScenario = "happy-path")
+        logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = "happy-path")
+        metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
+        metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
     }
 
     @Test
@@ -99,39 +69,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         response shouldBe aReserveOrderResponse(orderId = created.orderId)
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Low stock for SKU-LOW-STOCK (1/2)",
-            keyValues = mapOf(
-                "inventory.sku" to "SKU-LOW-STOCK",
-                "inventory.requested_quantity" to 1L,
-                "inventory.available_quantity" to 2L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "low-stock",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "CREATED",
-                "order.state" to "RESERVED",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.inventory.reservations",
-            unit = "{reservation}",
-            delta = 1L,
-            attributes = mapOf(
-                "inventory.sku" to "SKU-LOW-STOCK",
-                "inventory.outcome" to "LOW_STOCK_WARNING",
-            ),
-        )
+        logCapture.assertLowStockWarningLog(orderId = created.orderId, checkoutScenario = "low-stock")
+        metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
+        metricCapture.assertInventoryReservationIncremented(sku = "SKU-LOW-STOCK", outcome = LOW_STOCK_WARNING)
     }
 
     @Test
@@ -143,14 +83,7 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         problem.shouldBeNotFoundError("Order not found: non-existent-order")
 
         // and
-        logCapture.assertLogged(
-            level = WARN,
-            message = "Order not found: non-existent-order",
-            mdc = mapOf(
-                "checkout.scenario" to "reserve-miss",
-                "order.id" to "non-existent-order",
-            ),
-        )
+        logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "reserve-miss")
     }
 
     @Test
@@ -170,26 +103,13 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe CANCELLED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Cannot reserve order in CANCELLED state",
-            keyValues = mapOf(
-                "error.type" to "INVALID_STATE_TRANSITION",
-                "order.attempted_action" to "reserve",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "invalid-transition",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertInvalidStateTransitionLog(
+            orderId = created.orderId,
+            state = CANCELLED,
+            attemptedAction = "reserve",
+            checkoutScenario = "invalid-transition",
         )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
-        )
+        metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
     }
 
     @Test
@@ -210,45 +130,9 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe FAILED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Inventory out of stock for SKU-OUT-OF-STOCK",
-            keyValues = mapOf(
-                "error.type" to "OUT_OF_STOCK",
-                "inventory.sku" to "SKU-OUT-OF-STOCK",
-                "inventory.requested_quantity" to 1L,
-                "inventory.available_quantity" to 0L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "out-of-stock",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "CREATED",
-                "order.state" to "FAILED",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.inventory.reservations",
-            unit = "{reservation}",
-            delta = 1L,
-            attributes = mapOf(
-                "inventory.sku" to "SKU-OUT-OF-STOCK",
-                "inventory.outcome" to "OUT_OF_STOCK",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "OUT_OF_STOCK"),
-        )
+        logCapture.assertOutOfStockLog(orderId = created.orderId, checkoutScenario = "out-of-stock")
+        metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = FAILED)
+        metricCapture.assertInventoryReservationIncremented(sku = "SKU-OUT-OF-STOCK", outcome = OUT_OF_STOCK)
+        metricCapture.assertOrderErrorIncremented("OUT_OF_STOCK")
     }
 }

@@ -1,14 +1,19 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level.INFO
-import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aShipOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aShipOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.ShipOrderRequest
+import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertOrderErrorIncremented
+import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderShippedLog
+import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.OrderState.CANCELLED
+import com.observeit.observedapp.order.domain.OrderState.PAID
+import com.observeit.observedapp.order.domain.OrderState.SHIPPED
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeConflictError
 import com.observeit.observedapp.test.shouldBeNotFoundError
@@ -45,29 +50,8 @@ class ShipOrderIntegrationTest : IntegrationTest() {
         response shouldBe aShipOrderResponse(orderId = created.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order shipped",
-            keyValues = mapOf(
-                "order.state" to "SHIPPED",
-                "order.previous_state" to "PAID",
-                "shipping.method" to "STANDARD",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "happy-path",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "PAID",
-                "order.state" to "SHIPPED",
-            ),
-        )
+        logCapture.assertOrderShippedLog(orderId = created.orderId, checkoutScenario = "happy-path")
+        metricCapture.assertStateTransitionIncremented(previousState = PAID, state = SHIPPED)
     }
 
     @ParameterizedTest(name = "{0}")
@@ -93,14 +77,7 @@ class ShipOrderIntegrationTest : IntegrationTest() {
         problem.shouldBeNotFoundError("Order not found: non-existent-order")
 
         // and
-        logCapture.assertLogged(
-            level = WARN,
-            message = "Order not found: non-existent-order",
-            mdc = mapOf(
-                "checkout.scenario" to "ship-miss",
-                "order.id" to "non-existent-order",
-            ),
-        )
+        logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "ship-miss")
     }
 
     @Test
@@ -124,26 +101,13 @@ class ShipOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe CANCELLED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Cannot ship order in CANCELLED state",
-            keyValues = mapOf(
-                "error.type" to "INVALID_STATE_TRANSITION",
-                "order.attempted_action" to "ship",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "invalid-transition",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertInvalidStateTransitionLog(
+            orderId = created.orderId,
+            state = CANCELLED,
+            attemptedAction = "ship",
+            checkoutScenario = "invalid-transition",
         )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
-        )
+        metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
     }
 
     companion object {

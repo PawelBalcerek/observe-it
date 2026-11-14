@@ -7,7 +7,8 @@ Each service module configures three test source sets via `conventions.spring`:
 - **Shared Test Fixtures (`src/testFixtures/kotlin`)**:
   - Enabled via Gradle's `java-test-fixtures` plugin and shared across both unit and integration tests.
   - Houses domain/DTO `*Fixtures` (Object Mothers), reusable HTTP `*ApiFixture` clients, `ProblemDetail` assertion
-    helpers (`ProblemDetailFixtures`), and telemetry capture helpers (`LogCapture` and `MetricCapture`).
+    helpers (`ProblemDetailFixtures`), telemetry capture helpers (`LogCapture` and `MetricCapture`), and per-signal
+    telemetry assertion extensions (`*TelemetryFixtures`).
   - Keep internal helper properties/functions `private` and prune unused fixture helpers.
 - **Unit Tests (`src/test/kotlin`)**:
   - Fast, isolated, and decoupled from Spring container startup or network I/O.
@@ -78,7 +79,7 @@ object ItemFixtures {
 }
 ```
 
-## 4. Reusable HTTP (`*ApiFixture`), `ProblemDetail` & Telemetry (`LogCapture` & `MetricCapture`) Fixtures
+## 4. Reusable HTTP (`*ApiFixture`), `ProblemDetail` & Telemetry (`LogCapture`, `MetricCapture`, `*TelemetryFixtures`) Fixtures
 
 Keep test methods focused on behavior rather than infrastructure plumbing:
 
@@ -98,6 +99,23 @@ Keep test methods focused on behavior rather than infrastructure plumbing:
   `@JvmField @RegisterExtension` and pass `metricCapture.openTelemetry` to the adapter under test; in `@SpringBootTest`
   integration tests, use the per-context `metricCapture` bean autowired on `IntegrationTest` and verify counters,
   histograms, and gauges via `assertCounterIncremented`, `assertHistogramRecorded`, and `assertGaugeValue`.
+- **Per-Signal Telemetry Assertion Fixtures (`*TelemetryFixtures`)**: Place shared `LogCapture.assert*Log(...)` and
+  `MetricCapture.assert*(...)` top-level extension functions in each feature's `src/testFixtures/kotlin` package
+  (`OrderTelemetryFixtures`, `TrafficTelemetryFixtures`).
+  - **Strict per-signal separation**: Keep log and metric assertions as separate calls on `logCapture` and
+    `metricCapture` at every test call site so both telemetry signals remain explicitly visible in `// then` / `// and`
+    blocks; never bundle them into composite `assert*Telemetry` helpers.
+  - **Minimal-override defaults & explicit literals**: Follow the same default-argument conventions as `*Fixtures`
+    (for example, `checkoutScenario: String? = null` so the same log helper works in unit tests without HTTP filters
+    and in `@SpringBootTest` integration tests with `MDC`), and keep expected metric names, UCUM units, log keys,
+    and error types as explicit literals in `private object` namespaces inside the fixture.
+  - **Embedded invariants**: Enforce domain-specific invariants inside the fixture helper itself (`throwableProxy ==
+    null` on expected domain warnings, `throwableProxy != null` and minimum latency/duration on gateway timeouts,
+    `sum >= 0.0` on scenario duration histograms).
+  - **Boundary with low-level unit tests**: Use `*TelemetryFixtures` in domain service unit tests and HTTP/scenario
+    integration tests; keep low-level OpenTelemetry metric adapter tests (`Otel*MetricsTest`) and servlet/MDC filter
+    tests (`MdcCorrelationFilterTest`, `OrderMdcInterceptorTest`, `LoggingFormatTest`) on raw `MetricCapture` and
+    `LogCapture` calls so instrument names, units, attributes, and bucket boundaries are tested directly.
 
 ## 5. Given / When / Then Structure, Parameterized Validation, Kotest & Awaitility
 
