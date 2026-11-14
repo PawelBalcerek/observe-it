@@ -1,13 +1,19 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level.INFO
-import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aCancelOrderResponse
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.api.CancelOrderRequest
 import com.observeit.observedapp.order.api.OrderApiFixture
+import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertOrderCancelledLog
+import com.observeit.observedapp.order.assertOrderErrorIncremented
+import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertStateTransitionIncremented
+import com.observeit.observedapp.order.domain.OrderState.CANCELLED
+import com.observeit.observedapp.order.domain.OrderState.CREATED
+import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import com.observeit.observedapp.order.domain.OrderState.SHIPPED
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeConflictError
@@ -44,29 +50,13 @@ class CancelOrderIntegrationTest : IntegrationTest() {
         response shouldBe aCancelOrderResponse(orderId = created.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order cancelled",
-            keyValues = mapOf(
-                "order.state" to "CANCELLED",
-                "order.previous_state" to "CREATED",
-                "cancellation.reason" to "buyer changed mind",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "buyer-cancellation",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertOrderCancelledLog(
+            orderId = created.orderId,
+            previousState = CREATED,
+            reason = "buyer changed mind",
+            checkoutScenario = "buyer-cancellation",
         )
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "CREATED",
-                "order.state" to "CANCELLED",
-            ),
-        )
+        metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = CANCELLED)
     }
 
     @Test
@@ -86,29 +76,13 @@ class CancelOrderIntegrationTest : IntegrationTest() {
         response shouldBe aCancelOrderResponse(orderId = created.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order cancelled",
-            keyValues = mapOf(
-                "order.state" to "CANCELLED",
-                "order.previous_state" to "RESERVED",
-                "cancellation.reason" to "item no longer needed",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "buyer-cancellation",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertOrderCancelledLog(
+            orderId = created.orderId,
+            previousState = RESERVED,
+            reason = "item no longer needed",
+            checkoutScenario = "buyer-cancellation",
         )
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "RESERVED",
-                "order.state" to "CANCELLED",
-            ),
-        )
+        metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = CANCELLED)
     }
 
     @ParameterizedTest(name = "{0}")
@@ -134,14 +108,7 @@ class CancelOrderIntegrationTest : IntegrationTest() {
         problem.shouldBeNotFoundError("Order not found: non-existent-order")
 
         // and
-        logCapture.assertLogged(
-            level = WARN,
-            message = "Order not found: non-existent-order",
-            mdc = mapOf(
-                "checkout.scenario" to "cancel-miss",
-                "order.id" to "non-existent-order",
-            ),
-        )
+        logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "cancel-miss")
     }
 
     @Test
@@ -167,26 +134,13 @@ class CancelOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe SHIPPED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Cannot cancel order in SHIPPED state",
-            keyValues = mapOf(
-                "error.type" to "INVALID_STATE_TRANSITION",
-                "order.attempted_action" to "cancel",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "invalid-transition",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertInvalidStateTransitionLog(
+            orderId = created.orderId,
+            state = SHIPPED,
+            attemptedAction = "cancel",
+            checkoutScenario = "invalid-transition",
         )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
-        )
+        metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
     }
 
     companion object {

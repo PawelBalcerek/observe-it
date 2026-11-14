@@ -1,25 +1,33 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level.ERROR
-import ch.qos.logback.classic.Level.INFO
-import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aPayOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.PayOrderRequest
+import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertOrderErrorIncremented
+import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderPaidLog
+import com.observeit.observedapp.order.assertPaymentDeclinedLog
+import com.observeit.observedapp.order.assertPaymentDurationRecorded
+import com.observeit.observedapp.order.assertPaymentGatewayTimeoutLog
+import com.observeit.observedapp.order.assertPaymentTimeoutDurationRecorded
+import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.OrderState.CANCELLED
 import com.observeit.observedapp.order.domain.OrderState.FAILED
+import com.observeit.observedapp.order.domain.OrderState.PAID
+import com.observeit.observedapp.order.domain.OrderState.RESERVED
 import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
 import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
+import com.observeit.observedapp.order.domain.PaymentOutcome.DECLINED
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeConflictError
 import com.observeit.observedapp.test.shouldBeGatewayTimeoutError
 import com.observeit.observedapp.test.shouldBeNotFoundError
 import com.observeit.observedapp.test.shouldBeUnprocessableEntityError
 import com.observeit.observedapp.test.shouldBeValidationError
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -51,40 +59,9 @@ class PayOrderIntegrationTest : IntegrationTest() {
         response shouldBe aPayOrderResponse(orderId = created.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order paid",
-            keyValues = mapOf(
-                "order.state" to "PAID",
-                "order.previous_state" to "RESERVED",
-                "payment.method" to "CREDIT_CARD",
-                "payment.latency_ms" to 50L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "happy-path",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "RESERVED",
-                "order.state" to "PAID",
-            ),
-        )
-        metricCapture.assertHistogramRecorded(
-            name = "order.payment.duration",
-            unit = "ms",
-            count = 1L,
-            sum = 50.0,
-            attributes = mapOf(
-                "payment.method" to "CREDIT_CARD",
-                "payment.outcome" to "SUCCESS",
-            ),
-        )
+        logCapture.assertOrderPaidLog(orderId = created.orderId, checkoutScenario = "happy-path")
+        metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = PAID)
+        metricCapture.assertPaymentDurationRecorded()
     }
 
     @ParameterizedTest(name = "{0}")
@@ -110,14 +87,7 @@ class PayOrderIntegrationTest : IntegrationTest() {
         problem.shouldBeNotFoundError("Order not found: non-existent-order")
 
         // and
-        logCapture.assertLogged(
-            level = WARN,
-            message = "Order not found: non-existent-order",
-            mdc = mapOf(
-                "checkout.scenario" to "pay-miss",
-                "order.id" to "non-existent-order",
-            ),
-        )
+        logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "pay-miss")
     }
 
     @Test
@@ -141,26 +111,13 @@ class PayOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe CANCELLED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Cannot pay order in CANCELLED state",
-            keyValues = mapOf(
-                "error.type" to "INVALID_STATE_TRANSITION",
-                "order.attempted_action" to "pay",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "invalid-transition",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertInvalidStateTransitionLog(
+            orderId = created.orderId,
+            state = CANCELLED,
+            attemptedAction = "pay",
+            checkoutScenario = "invalid-transition",
         )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "INVALID_STATE_TRANSITION"),
-        )
+        metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
     }
 
     @Test
@@ -184,46 +141,10 @@ class PayOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe FAILED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = WARN,
-            message = "Payment declined for method DECLINED_CARD",
-            keyValues = mapOf(
-                "error.type" to "PAYMENT_DECLINED",
-                "payment.method" to "DECLINED_CARD",
-                "payment.latency_ms" to 50L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "payment-declined",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        logEvent.throwableProxy shouldBe null
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "RESERVED",
-                "order.state" to "FAILED",
-            ),
-        )
-        metricCapture.assertHistogramRecorded(
-            name = "order.payment.duration",
-            unit = "ms",
-            count = 1L,
-            sum = 50.0,
-            attributes = mapOf(
-                "payment.method" to "DECLINED_CARD",
-                "payment.outcome" to "DECLINED",
-            ),
-        )
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "PAYMENT_DECLINED"),
-        )
+        logCapture.assertPaymentDeclinedLog(orderId = created.orderId, checkoutScenario = "payment-declined")
+        metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
+        metricCapture.assertPaymentDurationRecorded(method = DECLINED_CARD, outcome = DECLINED)
+        metricCapture.assertOrderErrorIncremented("PAYMENT_DECLINED")
     }
 
     @Test
@@ -247,47 +168,10 @@ class PayOrderIntegrationTest : IntegrationTest() {
         order.state shouldBe FAILED
 
         // and
-        val logEvent = logCapture.assertLogged(
-            level = ERROR,
-            message = "Payment gateway timed out for method TIMEOUT_GATEWAY",
-            keyValues = mapOf(
-                "error.type" to "GATEWAY_TIMEOUT",
-                "payment.method" to "TIMEOUT_GATEWAY",
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "gateway-timeout",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
-        )
-        val latencyMs = logEvent.keyValuePairs.first { it.key == "payment.latency_ms" }.value as Long
-        (latencyMs >= 1000L) shouldBe true
-        logEvent.throwableProxy.shouldNotBeNull()
-        metricCapture.assertCounterIncremented(
-            name = "order.state.transitions",
-            unit = "{transition}",
-            delta = 1L,
-            attributes = mapOf(
-                "order.previous_state" to "RESERVED",
-                "order.state" to "FAILED",
-            ),
-        )
-        val paymentPoint = metricCapture.assertHistogramRecorded(
-            name = "order.payment.duration",
-            unit = "ms",
-            count = 1L,
-            attributes = mapOf(
-                "payment.method" to "TIMEOUT_GATEWAY",
-                "payment.outcome" to "TIMEOUT",
-            ),
-        )
-        (paymentPoint.sum >= 1000.0) shouldBe true
-        metricCapture.assertCounterIncremented(
-            name = "order.errors",
-            unit = "{error}",
-            delta = 1L,
-            attributes = mapOf("error.type" to "GATEWAY_TIMEOUT"),
-        )
+        logCapture.assertPaymentGatewayTimeoutLog(orderId = created.orderId, checkoutScenario = "gateway-timeout")
+        metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
+        metricCapture.assertPaymentTimeoutDurationRecorded()
+        metricCapture.assertOrderErrorIncremented("GATEWAY_TIMEOUT")
     }
 
     companion object {

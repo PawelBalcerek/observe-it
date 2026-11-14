@@ -1,11 +1,11 @@
 package com.observeit.observedapp.order
 
-import ch.qos.logback.classic.Level.INFO
-import ch.qos.logback.classic.Level.WARN
 import com.observeit.observedapp.IntegrationTest
 import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.anOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
+import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderRetrievedLog
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeNotFoundError
 import io.kotest.matchers.shouldBe
@@ -32,20 +32,9 @@ class GetOrderIntegrationTest : IntegrationTest() {
         response shouldBe anOrderResponse(orderId = created.orderId)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Order retrieved",
-            keyValues = mapOf(
-                "order.state" to "CREATED",
-                "order.total_amount" to 10.0,
-                "order.currency" to "USD",
-                "order.item_count" to 1L,
-            ),
-            mdc = mapOf(
-                "checkout.scenario" to "happy-path",
-                "order.id" to created.orderId,
-                "customer.id" to "customerId",
-            ),
+        logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            checkoutScenario = "happy-path",
         )
     }
 
@@ -58,13 +47,9 @@ class GetOrderIntegrationTest : IntegrationTest() {
         problem.shouldBeNotFoundError("Order not found: non-existent-order")
 
         // and
-        logCapture.assertLogged(
-            level = WARN,
-            message = "Order not found: non-existent-order",
-            mdc = mapOf(
-                "checkout.scenario" to "lookup-miss",
-                "order.id" to "non-existent-order",
-            ),
+        logCapture.assertOrderNotFoundLog(
+            orderId = "non-existent-order",
+            checkoutScenario = "lookup-miss",
         )
     }
 }

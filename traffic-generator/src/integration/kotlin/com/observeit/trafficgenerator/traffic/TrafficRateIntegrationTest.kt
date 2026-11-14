@@ -1,6 +1,5 @@
 package com.observeit.trafficgenerator.traffic
 
-import ch.qos.logback.classic.Level.INFO
 import com.observeit.trafficgenerator.IntegrationTest
 import com.observeit.trafficgenerator.test.LogCapture
 import com.observeit.trafficgenerator.test.shouldBeValidationError
@@ -55,14 +54,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         metricCapture.assertWorkerGauges(targetRate = 2.5, activeWorkers = 0L)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Traffic generator rate updated",
-            keyValues = mapOf(
-                "traffic.orders_per_second" to 2.5,
-                "traffic.concurrency" to 5,
-            ),
-        )
+        logCapture.assertTrafficRateUpdatedLog(ordersPerSecond = 2.5, concurrency = 5)
     }
 
     @Test
@@ -83,14 +75,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         metricCapture.assertWorkerGauges(targetRate = 4.0, activeWorkers = 0L)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Traffic generator rate updated",
-            keyValues = mapOf(
-                "traffic.orders_per_second" to 4.0,
-                "traffic.concurrency" to 3,
-            ),
-        )
+        logCapture.assertTrafficRateUpdatedLog(ordersPerSecond = 4.0, concurrency = 3)
     }
 
     @Test
@@ -111,14 +96,7 @@ class TrafficRateIntegrationTest : IntegrationTest() {
         metricCapture.assertWorkerGauges(targetRate = 1.0, activeWorkers = 0L)
 
         // and
-        logCapture.assertLogged(
-            level = INFO,
-            message = "Traffic generator rate updated",
-            keyValues = mapOf(
-                "traffic.orders_per_second" to 1.0,
-                "traffic.concurrency" to 6,
-            ),
-        )
+        logCapture.assertTrafficRateUpdatedLog(ordersPerSecond = 1.0, concurrency = 6)
     }
 
     @Test
