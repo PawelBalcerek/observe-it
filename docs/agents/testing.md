@@ -40,6 +40,16 @@ Each service module configures three test source sets via `conventions.spring`:
   test for it. Skip tests that only restate a declaration (enum entries, constant tables); test the invariant a
   declaration encodes (e.g., scenario weights sum to 1) where the code relying on it lives.
 
+- **End-to-End Verification (`e2e/src/test/kotlin`)**:
+  - Standalone `:e2e` Gradle subproject (`conventions.kotlin`, zero project dependencies on `:observed-app` or
+    `:traffic-generator`) that treats the running Docker Compose stack as a black box via HTTP (`HttpClient`) and
+    Docker CLI (`ProcessBuilder`).
+  - Default `:e2e:test` is disabled so `./gradlew check` stays fast and Docker-free while still running Ktlint, Detekt,
+    and the build-time `verifyOtelApiBoundary` runtime classpath check across Spring service modules.
+  - Executed against the live topology via `./gradlew :e2e:e2eTest` (or `make verify`), using `E2eSuiteHarness` for
+    one-time readiness polling and 7-scenario triggering and Awaitility (`await atMost ... untilAsserted`) with
+    OpenSearch index refreshes (`/_refresh`).
+
 ## 2. Fakes over Mocks
 
 - Wire **real in-memory or OpenTelemetry adapters** (`InMemoryOrderRepository`, `OtelOrderMetrics`,

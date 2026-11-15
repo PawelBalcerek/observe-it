@@ -401,8 +401,8 @@ operations:
 - `make down`: Gracefully stops and removes running containers (`docker compose down`).
 - `make reset`: Tears down running containers and deletes all persistent volumes (`docker compose down -v`), resetting
   the OpenSearch data volume (`opensearch-data`) to a blank slate.
-- `make verify`: Executes the 7-gate automated end-to-end verification suite
-  ([`scripts/verify.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/scripts/verify.sh)) to validate
+- `make verify`: Executes `./gradlew check` (including `verifyOtelApiBoundary`) and the Kotlin `:e2e:e2eTest`
+  verification suite ([`e2e/`](https://github.com/PawelBalcerek/observe-it/tree/main/e2e)) to validate
   API-only OpenTelemetry runtime classpaths, container health, 7-scenario execution, OpenSearch log, metric, and trace
   indexing (including distributed parent-child hierarchy), and Dashboards saved objects.
 

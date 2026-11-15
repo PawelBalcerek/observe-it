@@ -17,7 +17,7 @@ logs:
 	docker compose logs -f
 
 verify:
-	./scripts/verify.sh
+	./gradlew check :e2e:e2eTest
 
 docs-dev:
 	$(MAKE) -C docs dev

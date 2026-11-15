@@ -15,6 +15,7 @@ rootProject.name = "observe-it"
 
 include("observed-app")
 include("traffic-generator")
+include("e2e")
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
