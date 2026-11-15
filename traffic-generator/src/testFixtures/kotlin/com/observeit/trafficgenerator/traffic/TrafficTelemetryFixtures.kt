@@ -6,10 +6,17 @@ import ch.qos.logback.classic.Level.WARN
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.observeit.trafficgenerator.test.LogCapture
 import com.observeit.trafficgenerator.test.MetricCapture
+import com.observeit.trafficgenerator.test.SpanCapture
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
+import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_GATEWAY_TIMEOUT
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
+import io.kotest.matchers.shouldBe
+import io.opentelemetry.api.trace.SpanKind.INTERNAL
+import io.opentelemetry.api.trace.StatusCode
+import io.opentelemetry.api.trace.StatusCode.UNSET
 import io.opentelemetry.sdk.metrics.data.HistogramPointData
 import io.opentelemetry.sdk.metrics.data.PointData
+import io.opentelemetry.sdk.trace.data.SpanData
 
 private object Key {
     const val CHECKOUT_SCENARIO = "checkout.scenario"
@@ -52,6 +59,7 @@ private object State {
     const val PAID = "PAID"
     const val SHIPPED = "SHIPPED"
     const val CANCELLED = "CANCELLED"
+    const val FAILED = "FAILED"
 }
 
 private object Method {
@@ -66,6 +74,10 @@ private object ErrorType {
     const val PAYMENT_DECLINED = "PAYMENT_DECLINED"
     const val GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT"
     const val INVALID_STATE_TRANSITION = "INVALID_STATE_TRANSITION"
+}
+
+private object SpanName {
+    const val CHECKOUT_SCENARIO = "checkout.scenario"
 }
 
 private fun expectedScenarioMdc(scenario: CheckoutScenario, orderId: String, customerId: String): Map<String, String> =
@@ -309,3 +321,56 @@ fun LogCapture.assertTrafficPausedLog(): ILoggingEvent = assertLogged(
         Key.TRAFFIC_PAUSED to true,
     ),
 )
+
+fun SpanCapture.assertCheckoutScenarioSpan(
+    scenario: CheckoutScenario,
+    orderId: String,
+    customerId: String,
+    finalState: String,
+): SpanData = assertCheckoutScenarioSpanBase(
+    scenario = scenario,
+    orderId = orderId,
+    customerId = customerId,
+    finalState = finalState,
+    status = UNSET,
+)
+
+fun SpanCapture.assertCheckoutScenarioTimeoutSpan(
+    orderId: String,
+    customerId: String,
+    finalState: String = State.FAILED,
+): SpanData {
+    val span = assertCheckoutScenarioSpanBase(
+        scenario = PAYMENT_GATEWAY_TIMEOUT,
+        orderId = orderId,
+        customerId = customerId,
+        finalState = finalState,
+        status = StatusCode.ERROR,
+        extraAttributes = mapOf(Key.ERROR_TYPE to ErrorType.GATEWAY_TIMEOUT),
+    )
+    span.status.description shouldBe "Payment gateway timed out"
+    return span
+}
+
+private fun SpanCapture.assertCheckoutScenarioSpanBase(
+    scenario: CheckoutScenario,
+    orderId: String,
+    customerId: String,
+    finalState: String,
+    status: StatusCode,
+    extraAttributes: Map<String, Any?> = emptyMap(),
+): SpanData {
+    val span = assertSpanRecorded(
+        name = SpanName.CHECKOUT_SCENARIO,
+        kind = INTERNAL,
+        status = status,
+        attributes = mapOf(
+            Key.CHECKOUT_SCENARIO to scenario.name,
+            Key.CUSTOMER_ID to customerId,
+            Key.ORDER_ID to orderId,
+            Key.ORDER_STATE to finalState,
+        ) + extraAttributes,
+    )
+    assertNoExceptionRecorded(SpanName.CHECKOUT_SCENARIO)
+    return span
+}

@@ -1,6 +1,7 @@
 package com.observeit.trafficgenerator.traffic.infrastructure
 
 import com.observeit.trafficgenerator.test.MetricCapture
+import com.observeit.trafficgenerator.test.SpanCapture
 import com.observeit.trafficgenerator.traffic.TrafficFixtures.aTrafficRate
 import com.observeit.trafficgenerator.traffic.domain.CancelOrderResult
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
@@ -501,6 +502,7 @@ class TrafficWorkerCoordinatorTest {
         stepPacer = StepPacer {},
         counters = ScenarioExecutionCounters(),
         trafficMetrics = trafficMetrics,
+        trafficTracer = OtelTrafficTracer(SpanCapture().openTelemetry),
     )
 
     private fun recordingClient(onCreateOrder: () -> Unit): ObservedAppClient = object : ObservedAppClient {

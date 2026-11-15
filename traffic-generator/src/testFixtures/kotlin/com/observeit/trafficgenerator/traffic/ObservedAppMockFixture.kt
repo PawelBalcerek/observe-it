@@ -1,6 +1,10 @@
 package com.observeit.trafficgenerator.traffic
 
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario
+import io.kotest.assertions.withClue
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
 import org.springframework.http.HttpMethod.GET
 import org.springframework.http.HttpMethod.POST
 import org.springframework.http.HttpStatus.CONFLICT
@@ -10,6 +14,7 @@ import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
 import org.springframework.http.HttpStatus.UNPROCESSABLE_CONTENT
 import org.springframework.http.MediaType.APPLICATION_JSON
 import org.springframework.test.web.client.MockRestServiceServer
+import org.springframework.test.web.client.RequestMatcher
 import org.springframework.test.web.client.match.MockRestRequestMatchers.content
 import org.springframework.test.web.client.match.MockRestRequestMatchers.header
 import org.springframework.test.web.client.match.MockRestRequestMatchers.method
@@ -19,6 +24,8 @@ import org.springframework.test.web.client.response.MockRestResponseCreators.wit
 
 class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
 
+    private val capturedTraceparents = mutableListOf<String>()
+
     fun expectCreateOrder(
         scenario: CheckoutScenario,
         returnOrderId: String = Default.ORDER_ID,
@@ -27,6 +34,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}"))
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withStatus(CREATED)
                     .contentType(APPLICATION_JSON)
@@ -49,6 +57,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/reserve"))
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withSuccess(
                     """
@@ -70,6 +79,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId/reserve"))
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withStatus(UNPROCESSABLE_CONTENT)
                     .contentType(APPLICATION_JSON)
@@ -97,6 +107,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withSuccess(
                     """
@@ -120,6 +131,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withStatus(UNPROCESSABLE_CONTENT)
                     .contentType(APPLICATION_JSON)
@@ -147,6 +159,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withStatus(GATEWAY_TIMEOUT)
                     .contentType(APPLICATION_JSON)
@@ -174,6 +187,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"paymentMethod": "$paymentMethod"}"""))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withStatus(CONFLICT)
                     .contentType(APPLICATION_JSON)
@@ -201,6 +215,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"shippingMethod": "$shippingMethod"}"""))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withSuccess(
                     """
@@ -224,6 +239,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
             .andExpect(method(POST))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
             .andExpect(content().json("""{"reason": "$reason"}"""))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withSuccess(
                     """
@@ -246,6 +262,7 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         mockServer.expect(requestTo("${Endpoint.BASE_URL}${Endpoint.ORDERS_PATH}/$orderId"))
             .andExpect(method(GET))
             .andExpect(header(Endpoint.HEADER_CHECKOUT_SCENARIO, scenario.headerValue))
+            .andExpect(captureTraceparent())
             .andRespond(
                 withSuccess(
                     """
@@ -311,9 +328,29 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         mockServer.verify()
     }
 
+    fun resetTraceparents() {
+        capturedTraceparents.clear()
+    }
+
+    fun verifyTraceparentPropagation(expectedTraceId: String, expectedRequestCount: Int) {
+        capturedTraceparents shouldHaveSize expectedRequestCount
+        capturedTraceparents.forEach { traceparent ->
+            withClue("traceparent=$traceparent") {
+                val match = TRACEPARENT_PATTERN.matchEntire(traceparent)
+                match.shouldNotBeNull()
+                match.groupValues[1] shouldBe expectedTraceId
+            }
+        }
+    }
+
+    private fun captureTraceparent(): RequestMatcher = RequestMatcher { request ->
+        request.headers.getFirst(Endpoint.HEADER_TRACEPARENT)?.let(capturedTraceparents::add)
+    }
+
     private companion object {
         object Endpoint {
             const val HEADER_CHECKOUT_SCENARIO = "X-Checkout-Scenario"
+            const val HEADER_TRACEPARENT = "traceparent"
             const val BASE_URL = "http://localhost:8080"
             const val ORDERS_PATH = "/api/orders"
         }
@@ -336,5 +373,6 @@ class ObservedAppMockFixture(private val mockServer: MockRestServiceServer) {
         }
 
         const val TITLE_UNPROCESSABLE_CONTENT = "Unprocessable Content"
+        val TRACEPARENT_PATTERN = Regex("^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
     }
 }

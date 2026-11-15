@@ -8,6 +8,8 @@ import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.LOW_STOCK_
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.OUT_OF_STOCK
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_DECLINED
 import com.observeit.trafficgenerator.traffic.domain.CheckoutScenario.PAYMENT_GATEWAY_TIMEOUT
+import com.observeit.trafficgenerator.traffic.domain.TrafficTelemetry.ErrorType
+import com.observeit.trafficgenerator.traffic.domain.TrafficTelemetry.Key
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
@@ -21,6 +23,7 @@ class CheckoutScenarioRunner(
     private val stepPacer: StepPacer,
     private val counters: ScenarioExecutionCounters,
     private val trafficMetrics: TrafficMetrics,
+    private val trafficTracer: TrafficTracer,
 ) {
 
     private val logger = LoggerFactory.getLogger(CheckoutScenarioRunner::class.java)
@@ -31,27 +34,30 @@ class CheckoutScenarioRunner(
         CorrelationContext.setCustomerId(customerId)
 
         try {
-            val (finalOrder, duration) = measureTimedValue {
-                val orderId = executeOrderCreation(scenario, customerId, scenario.sku)
-                stepPacer.pace()
+            return trafficTracer.traceScenario(scenario, customerId) { scenarioSpan ->
+                val (finalOrder, duration) = measureTimedValue {
+                    val orderId = executeOrderCreation(scenario, customerId, scenario.sku)
+                    scenarioSpan.recordOrderCreated(orderId)
+                    stepPacer.pace()
 
-                val stoppedEarly = executeReservation(scenario, orderId, scenario.sku)
-                if (!stoppedEarly) {
-                    executeRemainingSteps(scenario, orderId)
+                    val stoppedEarly = executeReservation(scenario, orderId, scenario.sku)
+                    if (!stoppedEarly) {
+                        executeRemainingSteps(scenario, orderId, scenarioSpan)
+                    }
+
+                    retrieveFinalOrder(scenario, orderId)
                 }
-
-                retrieveFinalOrder(scenario, orderId)
+                counters.increment(scenario)
+                trafficMetrics.recordScenarioExecuted(scenario, finalOrder.state)
+                trafficMetrics.recordScenarioDuration(scenario, duration.toDouble(MILLISECONDS))
+                ScenarioExecutionResult(
+                    scenario = scenario,
+                    orderId = finalOrder.orderId,
+                    customerId = customerId,
+                    finalState = finalOrder.state,
+                    success = true,
+                )
             }
-            counters.increment(scenario)
-            trafficMetrics.recordScenarioExecuted(scenario, finalOrder.state)
-            trafficMetrics.recordScenarioDuration(scenario, duration.toDouble(MILLISECONDS))
-            return ScenarioExecutionResult(
-                scenario = scenario,
-                orderId = finalOrder.orderId,
-                customerId = customerId,
-                finalState = finalOrder.state,
-                success = true,
-            )
         } finally {
             CorrelationContext.clear()
         }
@@ -102,12 +108,12 @@ class CheckoutScenarioRunner(
             }
         }
 
-    private fun executeRemainingSteps(scenario: CheckoutScenario, orderId: String) {
+    private fun executeRemainingSteps(scenario: CheckoutScenario, orderId: String, scenarioSpan: ScenarioSpan) {
         when (scenario) {
             BUYER_CANCELLATION -> executeCancellation(scenario, orderId, CancellationReason.BUYER_CANCELLATION)
             INVALID_STATE_TRANSITION -> executeInvalidTransition(scenario, orderId)
             PAYMENT_DECLINED -> executePaymentDeclined(scenario, orderId)
-            PAYMENT_GATEWAY_TIMEOUT -> executePaymentTimeout(scenario, orderId)
+            PAYMENT_GATEWAY_TIMEOUT -> executePaymentTimeout(scenario, orderId, scenarioSpan)
             HAPPY_PATH, LOW_STOCK_WARNING -> executeHappyOrLowStock(scenario, orderId)
             OUT_OF_STOCK -> Unit
         }
@@ -148,9 +154,10 @@ class CheckoutScenarioRunner(
         stepPacer.pace()
     }
 
-    private fun executePaymentTimeout(scenario: CheckoutScenario, orderId: String) {
+    private fun executePaymentTimeout(scenario: CheckoutScenario, orderId: String, scenarioSpan: ScenarioSpan) {
         val payResult = client.payOrder(scenario, orderId, PaymentMethod.TIMEOUT_GATEWAY)
         if (payResult is PayOrderResult.Timeout) {
+            scenarioSpan.recordTimeout()
             logger.atError()
                 .addKeyValue(Key.ERROR_TYPE, ErrorType.GATEWAY_TIMEOUT)
                 .addKeyValue(Key.PAYMENT_METHOD, PaymentMethod.TIMEOUT_GATEWAY)
@@ -193,34 +200,12 @@ class CheckoutScenarioRunner(
     }
 
     private companion object {
-        object Key {
-            const val ORDER_ID = "order.id"
-            const val ORDER_STATE = "order.state"
-            const val ORDER_PREVIOUS_STATE = "order.previous_state"
-            const val ORDER_TOTAL_AMOUNT = "order.total_amount"
-            const val ORDER_CURRENCY = "order.currency"
-            const val ORDER_ITEM_COUNT = "order.item_count"
-            const val ORDER_ATTEMPTED_ACTION = "order.attempted_action"
-            const val INVENTORY_SKU = "inventory.sku"
-            const val PAYMENT_METHOD = "payment.method"
-            const val SHIPPING_METHOD = "shipping.method"
-            const val CANCELLATION_REASON = "cancellation.reason"
-            const val ERROR_TYPE = "error.type"
-        }
-
         object OrderState {
             const val CREATED = "CREATED"
             const val RESERVED = "RESERVED"
             const val PAID = "PAID"
             const val SHIPPED = "SHIPPED"
             const val CANCELLED = "CANCELLED"
-        }
-
-        object ErrorType {
-            const val OUT_OF_STOCK = "OUT_OF_STOCK"
-            const val PAYMENT_DECLINED = "PAYMENT_DECLINED"
-            const val GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT"
-            const val INVALID_STATE_TRANSITION = "INVALID_STATE_TRANSITION"
         }
 
         object Action {
