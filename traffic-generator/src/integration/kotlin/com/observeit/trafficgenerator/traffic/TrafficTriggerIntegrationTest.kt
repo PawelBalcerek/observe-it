@@ -42,6 +42,7 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
     @BeforeEach
     fun setUp() {
         mockServer.reset()
+        observedApp.resetTraceparents()
         baselineCounts = trafficApi.getStatusAndExpect200().scenarioExecutionCounts
         metricCapture.drainAndReset()
     }
@@ -79,6 +80,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(scenarioExecutionCounts = expectedCountsWithIncrement(HAPPY_PATH))
         metricCapture.assertScenarioExecutedIncremented(scenario = HAPPY_PATH, finalState = State.SHIPPED)
         metricCapture.assertScenarioDurationRecorded(scenario = HAPPY_PATH)
+
+        // and
+        val span = spanCapture.assertCheckoutScenarioSpan(
+            scenario = HAPPY_PATH,
+            orderId = orderId,
+            customerId = response.customerId,
+            finalState = State.SHIPPED,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 5)
 
         // and
         logCapture.assertOrderCreatedLog(
@@ -141,6 +151,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         metricCapture.assertScenarioDurationRecorded(scenario = LOW_STOCK_WARNING)
 
         // and
+        val span = spanCapture.assertCheckoutScenarioSpan(
+            scenario = LOW_STOCK_WARNING,
+            orderId = orderId,
+            customerId = response.customerId,
+            finalState = State.SHIPPED,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 5)
+
+        // and
         logCapture.assertOrderRetrievedLog(
             scenario = LOW_STOCK_WARNING,
             orderId = orderId,
@@ -175,6 +194,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         status shouldBe aTrafficStatusResponse(scenarioExecutionCounts = expectedCountsWithIncrement(OUT_OF_STOCK))
         metricCapture.assertScenarioExecutedIncremented(scenario = OUT_OF_STOCK, finalState = State.FAILED)
         metricCapture.assertScenarioDurationRecorded(scenario = OUT_OF_STOCK)
+
+        // and
+        val span = spanCapture.assertCheckoutScenarioSpan(
+            scenario = OUT_OF_STOCK,
+            orderId = orderId,
+            customerId = response.customerId,
+            finalState = State.FAILED,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 3)
 
         // and
         logCapture.assertOutOfStockLog(
@@ -223,6 +251,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         )
         metricCapture.assertScenarioExecutedIncremented(scenario = PAYMENT_DECLINED, finalState = State.FAILED)
         metricCapture.assertScenarioDurationRecorded(scenario = PAYMENT_DECLINED)
+
+        // and
+        val span = spanCapture.assertCheckoutScenarioSpan(
+            scenario = PAYMENT_DECLINED,
+            orderId = orderId,
+            customerId = response.customerId,
+            finalState = State.FAILED,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 4)
 
         // and
         logCapture.assertPaymentDeclinedLog(
@@ -276,6 +313,13 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         metricCapture.assertScenarioDurationRecorded(scenario = PAYMENT_GATEWAY_TIMEOUT)
 
         // and
+        val span = spanCapture.assertCheckoutScenarioTimeoutSpan(
+            orderId = orderId,
+            customerId = response.customerId,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 4)
+
+        // and
         logCapture.assertPaymentGatewayTimeoutLog(
             scenario = PAYMENT_GATEWAY_TIMEOUT,
             orderId = orderId,
@@ -318,6 +362,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
         )
         metricCapture.assertScenarioExecutedIncremented(scenario = BUYER_CANCELLATION, finalState = State.CANCELLED)
         metricCapture.assertScenarioDurationRecorded(scenario = BUYER_CANCELLATION)
+
+        // and
+        val span = spanCapture.assertCheckoutScenarioSpan(
+            scenario = BUYER_CANCELLATION,
+            orderId = orderId,
+            customerId = response.customerId,
+            finalState = State.CANCELLED,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 4)
 
         // and
         logCapture.assertOrderCancelledLog(
@@ -378,6 +431,15 @@ class TrafficTriggerIntegrationTest @Autowired constructor(private val mockServe
             finalState = State.CANCELLED,
         )
         metricCapture.assertScenarioDurationRecorded(scenario = INVALID_STATE_TRANSITION)
+
+        // and
+        val span = spanCapture.assertCheckoutScenarioSpan(
+            scenario = INVALID_STATE_TRANSITION,
+            orderId = orderId,
+            customerId = response.customerId,
+            finalState = State.CANCELLED,
+        )
+        observedApp.verifyTraceparentPropagation(expectedTraceId = span.traceId, expectedRequestCount = 5)
 
         // and
         logCapture.assertInvalidStateTransitionLog(
