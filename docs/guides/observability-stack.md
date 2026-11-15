@@ -175,16 +175,18 @@ instrumentation agent out of the application runtime classpath. The verification
 `io.opentelemetry:opentelemetry-api` (and its transitive context) with zero SDK or instrumentation artifacts.
 
 At runtime, [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) activates
-the agent and configures the Logback OTLP bridge and 1-second `DELTA` metrics export via environment variables:
+the agent and configures OTLP export for logs, 1-second `DELTA` metrics, and 1-second batched traces via environment
+variables:
 
 ```yaml
 environment:
   - BPL_JVM_THREAD_COUNT=50
   - OTEL_JAVAAGENT_ENABLED=true
   - OTEL_SERVICE_NAME=observed-app
-  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local
+  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.3.0},deployment.environment.name=local
   - OTEL_LOGS_EXPORTER=otlp
-  - OTEL_TRACES_EXPORTER=none
+  - OTEL_TRACES_EXPORTER=otlp
+  - OTEL_BSP_SCHEDULE_DELAY=1000
   - OTEL_METRICS_EXPORTER=otlp
   - OTEL_METRIC_EXPORT_INTERVAL=1000
   - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
@@ -290,19 +292,23 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [opensearch]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [opensearch]
 ```
 
 The pipeline operates with specific safeguards:
 
-- **Receiver ingress**: Receives OTLP log and metric streams over high-performance gRPC (`:4317`) from the application
-  Java Agents and exposes HTTP (`:4318`) for standard web hooks.
+- **Receiver ingress**: Receives OTLP log, metric, and trace streams over high-performance gRPC (`:4317`) from the
+  application Java Agents and exposes HTTP (`:4318`) for standard web hooks.
 - **Memory protection**: `limit_mib: 200` and `spike_limit_mib: 50` ensure the collector process never breaches its
   256 MB Docker container memory limit (`mem_limit: 256m`).
 - **Batching efficiency**: Aggregates records into chunks of 100 entries or flushes every 1 second, reducing HTTP
   connection overhead against OpenSearch.
 - **SS4O mapping & retries**: Uses `mapping.mode: ss4o` with dataset `observe-it` and namespace `local`, routing log
-  records to `ss4o_logs-observe-it-local` and metric points to `ss4o_metrics-observe-it-local`. Persistent queues and
-  backoff retries safeguard delivery during transient storage load.
+  records to `ss4o_logs-observe-it-local`, metric points to `ss4o_metrics-observe-it-local`, and trace spans to
+  `ss4o_traces-observe-it-local`. Persistent queues and backoff retries safeguard delivery during transient storage load.
 
 For in-depth analysis of collector export modes and rejected OTTL transform alternatives, see
 [ADR-0002: Direct OpenTelemetry Collector ss4o Export and OpenSearch Ingest Pipeline](../adr/0002-otel-collector-ss4o-and-opensearch-ingest-pipeline.md).
@@ -337,14 +343,15 @@ produce clean documents for exploration, search backends pair target schema conv
 
 ### In Observe-It
 
-Observe-It coordinates storage provisioning through six configuration files in
+Observe-It coordinates storage provisioning through configuration files in
 [`docker/opensearch/`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/):
 
 1. **Bootstrap orchestrator** ([`docker/opensearch/bootstrap.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/bootstrap.sh)):
    A one-shot Bash script executed by the `opensearch-bootstrap` container. It verifies cluster availability, installs
-   the log and metrics ingest pipelines (`observe-it-logs-pipeline`, `observe-it-metrics-pipeline`) and index templates
-   (`observe-it-ss4o-logs`, `observe-it-ss4o-metrics`), waits for `opensearch-dashboards` HTTP availability, imports
-   pre-built saved objects, and sets `ss4o_logs` as the default index pattern.
+   the log, metrics, and traces ingest pipelines (`observe-it-logs-pipeline`, `observe-it-metrics-pipeline`,
+   `observe-it-traces-pipeline`) and index templates (`observe-it-ss4o-logs`, `observe-it-ss4o-metrics`,
+   `observe-it-ss4o-traces`), waits for `opensearch-dashboards` HTTP availability, imports pre-built saved objects, and
+   sets `ss4o_logs` as the default index pattern.
 2. **Log ingest pipeline** ([`docker/opensearch/ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/ingest-pipeline.json)):
    A Painless script processor registered as `observe-it-logs-pipeline` that promotes top-level fields (`body` →
    `message`, `severity.text` → `level`, `instrumentationScope.name` → `logger`, `resource['service.name']` → `service`,
@@ -363,11 +370,18 @@ Observe-It coordinates storage provisioning through six configuration files in
    Registers `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics` (`ss4o_metrics-*`, priority 200) to promote
    `service`, `version`, and `env`, unify `value@int` / `value@double` into `value`, and map `value@int` as 64-bit
    `long` (see [ADR-0007](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md)).
-5. **Pre-configured dashboards & saved searches** ([`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson)):
-   Imports both `ss4o_logs-*` and `ss4o_metrics-*` index patterns, four log saved searches (`All Order Logs`,
-   `Warnings & Business Rejections`, `Gateway Timeouts & Stack Traces`, `Checkout Scenario Explorer`), two metric saved
-   searches (`All Metrics`, `Domain Order Metrics`), nine visualizations, and the `Observe-It Metrics Overview`
-   dashboard.
+5. **Traces ingest pipeline & index template**
+   ([`traces-ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-ingest-pipeline.json)
+   and
+   [`traces-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-index-template.json)):
+   Registers `observe-it-traces-pipeline` and `observe-it-ss4o-traces` (`ss4o_traces-*`, priority 200) to set
+   `@timestamp` from `startTime`, compute `durationInNanos` and `durationMs`, promote `service`, `serviceName`,
+   `version`, and `env`, and map `events.attributes.exception.*` (see
+   [ADR-0009](../adr/0009-ss4o-traces-ingest-normalization-and-dashboards-exploration.md)).
+6. **Pre-configured dashboards & saved searches** ([`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson)):
+   Imports `ss4o_logs-*`, `ss4o_metrics-*`, and `ss4o_traces-*` index patterns, four log saved searches, two metric
+   saved searches, four trace saved searches, sixteen visualizations, and the `Observe-It Metrics Overview` and
+   `Observe-It Traces Overview` dashboards.
 
 ## Stack Lifecycle Commands
 
@@ -387,26 +401,26 @@ operations:
 - `make down`: Gracefully stops and removes running containers (`docker compose down`).
 - `make reset`: Tears down running containers and deletes all persistent volumes (`docker compose down -v`), resetting
   the OpenSearch data volume (`opensearch-data`) to a blank slate.
-- `make verify`: Executes automated end-to-end smoke verification
+- `make verify`: Executes the 7-gate automated end-to-end verification suite
   ([`scripts/verify.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/scripts/verify.sh)) to validate
-  API-only OpenTelemetry runtime classpaths, container health, scenario execution, and OpenSearch log and metric
-  indexing without manual intervention.
+  API-only OpenTelemetry runtime classpaths, container health, 7-scenario execution, OpenSearch log, metric, and trace
+  indexing (including distributed parent-child hierarchy), and Dashboards saved objects.
 
 #### Dual-Mode Docker Compose Workflow
 
 Docker Compose supports variable parameterization for image coordinates and pull policies:
 
-- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.2.0}`
+- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.3.0}`
 - `pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}`
-- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.2.0},deployment.environment.name=local`
+- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.3.0},deployment.environment.name=local`
 
 This dual-mode design enables two core development workflows:
 
 1. **Pre-built GHCR images (Zero-build evaluation)**: Running `docker compose up -d` pulls multi-architecture
    (`linux/amd64` and `linux/arm64`) OCI container images from GitHub Container Registry out of the box when no local
    image exists (`pull_policy: missing`).
-2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.2.0`
-   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.2.0` into the local Docker daemon. Subsequent `docker compose up -d`
+2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.3.0`
+   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.3.0` into the local Docker daemon. Subsequent `docker compose up -d`
    commands use the locally built images without network requests.
 3. **Strict offline / CI verification**: Passing `OBSERVE_IT_PULL_POLICY=never` ensures pull request and branch builds
    strictly verify locally built container images and fail fast if images are missing.
