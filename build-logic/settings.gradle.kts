@@ -8,7 +8,7 @@ dependencyResolutionManagement {
 }
 
 plugins {
-    id("dev.panuszewski.typesafe-conventions") version "0.12.1"
+    id("dev.panuszewski.typesafe-conventions") version "0.12.2"
 }
 
 rootProject.name = "build-logic"
