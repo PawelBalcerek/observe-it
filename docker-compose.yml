@@ -87,7 +87,8 @@ services:
       - OTEL_SERVICE_NAME=observed-app
       - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.3.0},deployment.environment.name=local
       - OTEL_LOGS_EXPORTER=otlp
-      - OTEL_TRACES_EXPORTER=none
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_BSP_SCHEDULE_DELAY=1000
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_METRIC_EXPORT_INTERVAL=1000
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
@@ -123,7 +124,8 @@ services:
       - OTEL_SERVICE_NAME=traffic-generator
       - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.3.0},deployment.environment.name=local
       - OTEL_LOGS_EXPORTER=otlp
-      - OTEL_TRACES_EXPORTER=none
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_BSP_SCHEDULE_DELAY=1000
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_METRIC_EXPORT_INTERVAL=1000
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta

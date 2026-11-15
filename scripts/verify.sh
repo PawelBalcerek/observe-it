@@ -142,6 +142,7 @@ SCENARIOS=(
   "INVALID_STATE_TRANSITION"
 )
 
+HAPPY_PATH_ORDER_ID=""
 for scenario in "${SCENARIOS[@]}"; do
   echo "==> Triggering scenario: ${scenario}..."
   RESPONSE="$(curl -fsS -X POST "http://localhost:8081/api/traffic/trigger/${scenario}")"
@@ -151,14 +152,23 @@ for scenario in "${SCENARIOS[@]}"; do
     echo "FAIL: Scenario ${scenario} did not report success: true"
     exit 1
   fi
+  if [ "${scenario}" = "HAPPY_PATH" ]; then
+    HAPPY_PATH_ORDER_ID="$(echo "${RESPONSE}" | jq -r .orderId)"
+  fi
 done
+
+if [ -z "${HAPPY_PATH_ORDER_ID}" ] || [ "${HAPPY_PATH_ORDER_ID}" = "null" ]; then
+  echo "FAIL: HAPPY_PATH trigger response did not return a valid orderId"
+  exit 1
+fi
 
 echo "==> Waiting 5s for Collector batch flush..."
 sleep 5
 
-echo "==> Refreshing OpenSearch indices ss4o_logs-observe-it-local and ss4o_metrics-observe-it-local..."
+echo "==> Refreshing OpenSearch indices ss4o_logs-observe-it-local, ss4o_metrics-observe-it-local, and ss4o_traces-observe-it-local..."
 curl -fsS -X POST "http://localhost:9200/ss4o_logs-observe-it-local/_refresh" >/dev/null
 curl -fsS -X POST "http://localhost:9200/ss4o_metrics-observe-it-local/_refresh" >/dev/null
+curl -fsS -X POST "http://localhost:9200/ss4o_traces-observe-it-local/_refresh" >/dev/null
 echo "Gate 3 PASSED: Deterministic 7-Scenario Trigger Gate"
 
 # ----------------------------------------------------------------------
@@ -638,11 +648,302 @@ echo "✔ jvm.memory.used: ${JVM_MEM_MATCHES} documents with positive value@int 
 echo "Gate 5 PASSED: OpenSearch ss4o_metrics-observe-it-local Schema & Telemetry Gate"
 
 # ----------------------------------------------------------------------
-# Gate 6: OpenSearch Dashboards Saved Objects Gate
+# Gate 6: OpenSearch ss4o_traces-observe-it-local Schema, Hierarchy & Correlation Gate
 # ----------------------------------------------------------------------
 echo ""
 echo "------------------------------------------------------------------------"
-echo " Gate 6: OpenSearch Dashboards Saved Objects Gate"
+echo " Gate 6: OpenSearch ss4o_traces-observe-it-local Schema, Hierarchy & Correlation Gate"
+echo "------------------------------------------------------------------------"
+
+echo "==> Verifying _index_template/observe-it-ss4o-traces and _ingest/pipeline/observe-it-traces-pipeline exist..."
+TRACES_TEMPLATE_COUNT="$(curl -fsS "http://localhost:9200/_index_template/observe-it-ss4o-traces" | jq '.index_templates | length')"
+if [ "${TRACES_TEMPLATE_COUNT}" -lt 1 ]; then
+  echo "FAIL: _index_template/observe-it-ss4o-traces does not exist"
+  exit 1
+fi
+TRACES_PIPELINE_COUNT="$(curl -fsS "http://localhost:9200/_ingest/pipeline/observe-it-traces-pipeline" | jq 'keys | length')"
+if [ "${TRACES_PIPELINE_COUNT}" -lt 1 ]; then
+  echo "FAIL: _ingest/pipeline/observe-it-traces-pipeline does not exist"
+  exit 1
+fi
+echo "Index template observe-it-ss4o-traces and pipeline observe-it-traces-pipeline exist."
+
+echo "==> Verifying ss4o_traces-observe-it-local index health is green (1 shard, 0 replicas)..."
+TRACES_INDEX_HEALTH="$(curl -fsS "http://localhost:9200/_cluster/health/ss4o_traces-observe-it-local" | jq -r .status)"
+if [ "${TRACES_INDEX_HEALTH}" != "green" ]; then
+  echo "FAIL: ss4o_traces-observe-it-local index health is '${TRACES_INDEX_HEALTH}', expected 'green'"
+  exit 1
+fi
+
+TRACES_INDEX_SETTINGS="$(curl -fsS "http://localhost:9200/ss4o_traces-observe-it-local/_settings")"
+TRACES_SHARDS="$(echo "${TRACES_INDEX_SETTINGS}" | jq -r '.[].settings.index.number_of_shards')"
+TRACES_REPLICAS="$(echo "${TRACES_INDEX_SETTINGS}" | jq -r '.[].settings.index.number_of_replicas')"
+if [ "${TRACES_SHARDS}" != "1" ] || [ "${TRACES_REPLICAS}" != "0" ]; then
+  echo "FAIL: Expected 1 shard and 0 replicas on ss4o_traces-observe-it-local, got shards=${TRACES_SHARDS}, replicas=${TRACES_REPLICAS}"
+  exit 1
+fi
+echo "Traces index health is green (1 shard, 0 replicas)."
+
+count_traces() {
+  local query_json="$1"
+  curl -fsS -X POST "http://localhost:9200/ss4o_traces-observe-it-local/_count" \
+    -H "Content-Type: application/json" \
+    -d "${query_json}" | jq -r .count
+}
+
+echo "==> Verifying normalized trace fields, timestamps, durations, and 0 attributes.data_stream..."
+for svc in "observed-app" "traffic-generator"; do
+  SVC_TRACE_DOCS="$(count_traces "{
+    \"query\": {
+      \"bool\": {
+        \"must\": [
+          {\"term\": {\"service\": \"${svc}\"}},
+          {\"term\": {\"serviceName\": \"${svc}\"}},
+          {\"term\": {\"version\": \"${IMAGE_TAG}\"}},
+          {\"term\": {\"env\": \"local\"}}
+        ]
+      }
+    }
+  }")"
+  if [ "${SVC_TRACE_DOCS}" -le 0 ]; then
+    echo "FAIL: No normalized trace documents found for service=${svc}, version=${IMAGE_TAG}, env=local"
+    exit 1
+  fi
+  echo "✔ ${svc}: ${SVC_TRACE_DOCS} normalized trace documents."
+done
+
+ZERO_TIMESTAMP_TRACES="$(count_traces '{
+  "query": {
+    "bool": {
+      "should": [
+        {"bool": {"must_not": [{"exists": {"field": "@timestamp"}}]}},
+        {"range": {"@timestamp": {"lt": "2020-01-01T00:00:00Z"}}}
+      ],
+      "minimum_should_match": 1
+    }
+  }
+}')"
+if [ "${ZERO_TIMESTAMP_TRACES}" -ne 0 ]; then
+  echo "FAIL: Found ${ZERO_TIMESTAMP_TRACES} trace documents with missing or pre-2020 @timestamp"
+  exit 1
+fi
+
+TRACES_DATA_STREAM_DOCS="$(count_traces '{"query":{"exists":{"field":"attributes.data_stream"}}}')"
+if [ "${TRACES_DATA_STREAM_DOCS}" -ne 0 ]; then
+  echo "FAIL: Found ${TRACES_DATA_STREAM_DOCS} trace documents with attributes.data_stream"
+  exit 1
+fi
+
+INVALID_DURATION_DOCS="$(count_traces '{
+  "query": {
+    "bool": {
+      "should": [
+        {"bool": {"must_not": [{"exists": {"field": "durationInNanos"}}]}},
+        {"bool": {"must_not": [{"exists": {"field": "durationMs"}}]}},
+        {"range": {"durationInNanos": {"lt": 0}}},
+        {"range": {"durationMs": {"lt": 0}}}
+      ],
+      "minimum_should_match": 1
+    }
+  }
+}')"
+if [ "${INVALID_DURATION_DOCS}" -ne 0 ]; then
+  echo "FAIL: Found ${INVALID_DURATION_DOCS} trace documents with missing or negative durationInNanos/durationMs"
+  exit 1
+fi
+echo "✔ 0 invalid @timestamp, 0 attributes.data_stream, and valid durationInNanos/durationMs across all spans."
+
+echo "==> Verifying all 7 CheckoutScenario keys in trace spans..."
+TRACE_SCENARIO_KEYS="$(curl -fsS -X POST "http://localhost:9200/ss4o_traces-observe-it-local/_search" \
+  -H "Content-Type: application/json" \
+  -d '{"size":0,"aggs":{"scenarios":{"terms":{"field":"attributes.checkout.scenario","size":20}}}}' | \
+  jq -r '.aggregations.scenarios.buckets[].key' | sort)"
+
+for expected_scenario in "${SCENARIOS[@]}"; do
+  if ! echo "${TRACE_SCENARIO_KEYS}" | grep -qx "${expected_scenario}"; then
+    echo "FAIL: Scenario key '${expected_scenario}' missing from trace attributes.checkout.scenario buckets:"
+    echo "${TRACE_SCENARIO_KEYS}"
+    exit 1
+  fi
+done
+echo "✔ All 7 scenario keys present in trace attributes.checkout.scenario."
+
+echo "==> Verifying custom domain spans and HTTP Client/Server spans..."
+EXPECTED_SPAN_NAMES=(
+  "checkout.scenario"
+  "order.create"
+  "order.get"
+  "order.reserve"
+  "order.pay"
+  "payment.process"
+  "order.ship"
+  "order.cancel"
+)
+for span_name in "${EXPECTED_SPAN_NAMES[@]}"; do
+  SPAN_COUNT="$(count_traces "{\"query\":{\"term\":{\"name\":\"${span_name}\"}}}")"
+  if [ "${SPAN_COUNT}" -le 0 ]; then
+    echo "FAIL: Custom span '${span_name}' has 0 documents"
+    exit 1
+  fi
+  echo "✔ Span '${span_name}': ${SPAN_COUNT} documents."
+done
+
+for span_kind in "Client" "Server"; do
+  KIND_COUNT="$(count_traces "{\"query\":{\"term\":{\"kind\":\"${span_kind}\"}}}")"
+  if [ "${KIND_COUNT}" -le 0 ]; then
+    echo "FAIL: Span kind '${span_kind}' has 0 documents"
+    exit 1
+  fi
+  echo "✔ Span kind '${span_kind}': ${KIND_COUNT} documents."
+done
+
+echo "==> Verifying distributed parent-child spanId/parentSpanId chain for HAPPY_PATH order (${HAPPY_PATH_ORDER_ID})..."
+HAPPY_ROOT_RES="$(curl -fsS -X POST "http://localhost:9200/ss4o_traces-observe-it-local/_search?size=5" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"query\": {
+      \"bool\": {
+        \"must\": [
+          {\"term\": {\"name\": \"checkout.scenario\"}},
+          {\"term\": {\"attributes.checkout.scenario\": \"HAPPY_PATH\"}},
+          {\"term\": {\"attributes.order.id\": \"${HAPPY_PATH_ORDER_ID}\"}}
+        ]
+      }
+    }
+  }")"
+HAPPY_ROOT_COUNT="$(echo "${HAPPY_ROOT_RES}" | jq -r '.hits.total.value')"
+if [ "${HAPPY_ROOT_COUNT}" -ne 1 ]; then
+  echo "FAIL: Expected 1 root checkout.scenario span for HAPPY_PATH order ${HAPPY_PATH_ORDER_ID}, got ${HAPPY_ROOT_COUNT}"
+  exit 1
+fi
+
+HAPPY_TRACE_ID="$(echo "${HAPPY_ROOT_RES}" | jq -r '.hits.hits[0]._source.traceId')"
+
+TRACE_SPANS_RES="$(curl -fsS -X POST "http://localhost:9200/ss4o_traces-observe-it-local/_search?size=100" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":{\"term\":{\"traceId\":\"${HAPPY_TRACE_ID}\"}}}")"
+
+echo "${TRACE_SPANS_RES}" | jq -e '
+  [.hits.hits[]._source] as $spans |
+  ($spans | map(.service) | unique) as $services |
+  ($spans | map(.spanId)) as $all_ids |
+  ($services | index("traffic-generator")) != null and
+  ($services | index("observed-app")) != null and
+  ([$spans[] | select(.parentSpanId == null or .parentSpanId == "")] | length == 1) and
+  ([$spans[] | select(.parentSpanId != null and .parentSpanId != "")] | all(.parentSpanId as $p | ($all_ids | index($p) != null))) and
+  ([$spans[] | select(.service == "traffic-generator" and (.kind == "Client" or .kind == "CLIENT" or .kind == "SPAN_KIND_CLIENT"))] | length > 0) and
+  ([$spans[] | select(.service == "observed-app" and (.kind == "Server" or .kind == "SERVER" or .kind == "SPAN_KIND_SERVER"))] | length > 0) and
+  ([$spans[] | select(.name == "checkout.scenario")] | length == 1) and
+  ([$spans[] | select(.name == "order.create")] | length == 1) and
+  ([$spans[] | select(.name == "order.reserve")] | length == 1) and
+  ([$spans[] | select(.name == "order.pay")] | length == 1) and
+  ([$spans[] | select(.name == "payment.process")] | length == 1) and
+  ([$spans[] | select(.name == "order.ship")] | length == 1)
+' >/dev/null || {
+  echo "FAIL: Distributed trace hierarchy check failed for HAPPY_PATH traceId=${HAPPY_TRACE_ID}"
+  echo "${TRACE_SPANS_RES}" | jq '[.hits.hits[]._source | {service, name, kind, spanId, parentSpanId}]'
+  exit 1
+}
+echo "✔ Distributed trace hierarchy verified for HAPPY_PATH traceId=${HAPPY_TRACE_ID} across traffic-generator and observed-app."
+
+echo "==> Verifying inventory.reservation and order.state.transitioned span events..."
+for event_name in "inventory.reservation" "order.state.transitioned"; do
+  EVENT_COUNT="$(count_traces "{\"query\":{\"term\":{\"events.name\":\"${event_name}\"}}}")"
+  if [ "${EVENT_COUNT}" -le 0 ]; then
+    echo "FAIL: Span event '${event_name}' has 0 documents"
+    exit 1
+  fi
+  echo "✔ Span event '${event_name}': ${EVENT_COUNT} documents."
+done
+
+echo "==> Verifying span status discipline (Unset on 4xx rejections vs Error + exception event on PAYMENT_GATEWAY_TIMEOUT)..."
+for rejection_err in "OUT_OF_STOCK" "PAYMENT_DECLINED" "INVALID_STATE_TRANSITION"; do
+  REJECTION_TOTAL="$(count_traces "{
+    \"query\": {
+      \"bool\": {
+        \"must\": [
+          {\"term\": {\"service\": \"observed-app\"}},
+          {\"term\": {\"attributes.error.type\": \"${rejection_err}\"}}
+        ]
+      }
+    }
+  }")"
+  if [ "${REJECTION_TOTAL}" -le 0 ]; then
+    echo "FAIL: Expected at least 1 observed-app span for ${rejection_err}"
+    exit 1
+  fi
+
+  REJECTION_BAD_STATUS="$(count_traces "{
+    \"query\": {
+      \"bool\": {
+        \"must\": [
+          {\"term\": {\"service\": \"observed-app\"}},
+          {\"term\": {\"attributes.error.type\": \"${rejection_err}\"}}
+        ],
+        \"should\": [
+          {\"bool\": {\"must_not\": [{\"terms\": {\"status.code\": [\"UNSET\", \"Unset\", \"STATUS_CODE_UNSET\"]}}]}},
+          {\"term\": {\"events.name\": \"exception\"}}
+        ],
+        \"minimum_should_match\": 1
+      }
+    }
+  }")"
+  if [ "${REJECTION_BAD_STATUS}" -ne 0 ]; then
+    echo "FAIL: Found ${REJECTION_BAD_STATUS} observed-app spans for ${rejection_err} without Unset status or with exception event"
+    exit 1
+  fi
+  echo "✔ ${rejection_err}: ${REJECTION_TOTAL} observed-app spans with Unset status and 0 exception events."
+done
+
+TIMEOUT_TRACE_RES="$(curl -fsS -X POST "http://localhost:9200/ss4o_traces-observe-it-local/_search?size=5" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "bool": {
+        "must": [
+          {"term": {"service": "observed-app"}},
+          {"term": {"attributes.error.type": "GATEWAY_TIMEOUT"}},
+          {"terms": {"status.code": ["ERROR", "Error", "STATUS_CODE_ERROR"]}},
+          {"term": {"events.name": "exception"}},
+          {"exists": {"field": "events.attributes.exception.stacktrace"}}
+        ]
+      }
+    }
+  }')"
+TIMEOUT_TRACE_COUNT="$(echo "${TIMEOUT_TRACE_RES}" | jq -r '.hits.total.value')"
+if [ "${TIMEOUT_TRACE_COUNT}" -le 0 ]; then
+  echo "FAIL: No observed-app GATEWAY_TIMEOUT spans found with Error status and exception stacktrace event"
+  exit 1
+fi
+echo "✔ GATEWAY_TIMEOUT: ${TIMEOUT_TRACE_COUNT} observed-app spans with Error status and exception stacktrace event."
+
+echo "==> Verifying cross-signal traceId/spanId join between ss4o_logs-observe-it-local and ss4o_traces-observe-it-local..."
+CORRELATED_LOGS_RES="$(curl -fsS -X POST "http://localhost:9200/ss4o_logs-observe-it-local/_search?size=50" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":{\"term\":{\"traceId\":\"${HAPPY_TRACE_ID}\"}}}")"
+CORRELATED_LOGS_COUNT="$(echo "${CORRELATED_LOGS_RES}" | jq -r '.hits.total.value')"
+if [ "${CORRELATED_LOGS_COUNT}" -le 0 ]; then
+  echo "FAIL: No logs found in ss4o_logs-observe-it-local for HAPPY_PATH traceId=${HAPPY_TRACE_ID}"
+  exit 1
+fi
+
+TRACE_SPAN_IDS_JSON="$(echo "${TRACE_SPANS_RES}" | jq -c '[.hits.hits[]._source.spanId]')"
+JOINED_SPAN_MATCHES="$(echo "${CORRELATED_LOGS_RES}" | jq --argjson span_ids "${TRACE_SPAN_IDS_JSON}" '
+  [.hits.hits[]._source.spanId | select(. != null and ($span_ids | index(.) != null))] | length
+')"
+if [ "${JOINED_SPAN_MATCHES}" -le 0 ]; then
+  echo "FAIL: Logs for traceId=${HAPPY_TRACE_ID} have 0 spanId matches in ss4o_traces-observe-it-local"
+  exit 1
+fi
+echo "✔ Cross-signal join verified: ${CORRELATED_LOGS_COUNT} logs share traceId=${HAPPY_TRACE_ID} (${JOINED_SPAN_MATCHES} exact spanId matches)."
+echo "Gate 6 PASSED: OpenSearch ss4o_traces-observe-it-local Schema, Hierarchy & Correlation Gate"
+
+# ----------------------------------------------------------------------
+# Gate 7: OpenSearch Dashboards Saved Objects Gate
+# ----------------------------------------------------------------------
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Gate 7: OpenSearch Dashboards Saved Objects Gate"
 echo "------------------------------------------------------------------------"
 
 SAVED_OBJECTS="$(curl -fsS -H "osd-xsrf: true" \
@@ -652,12 +953,17 @@ SAVED_OBJECTS="$(curl -fsS -H "osd-xsrf: true" \
 EXPECTED_SAVED_OBJECTS=(
   "index-pattern:ss4o_logs"
   "index-pattern:ss4o_metrics"
+  "index-pattern:ss4o_traces"
   "search:all-order-logs"
   "search:warnings-and-rejections"
   "search:gateway-timeouts-and-errors"
   "search:checkout-scenario-explorer"
   "search:all-metrics"
   "search:domain-order-metrics"
+  "search:all-trace-spans"
+  "search:checkout-scenario-traces"
+  "search:domain-order-spans"
+  "search:error-and-timeout-spans"
   "visualization:traffic-scenarios-by-outcome"
   "visualization:traffic-scenario-duration"
   "visualization:order-state-transitions"
@@ -667,7 +973,15 @@ EXPECTED_SAVED_OBJECTS=(
   "visualization:http-server-requests-and-latency"
   "visualization:jvm-heap-memory-by-service"
   "visualization:runtime-gauges-kpi"
+  "visualization:trace-spans-kpi"
+  "visualization:spans-by-service-and-kind"
+  "visualization:scenario-trace-duration"
+  "visualization:domain-span-latency-by-operation"
+  "visualization:http-server-span-latency-by-route"
+  "visualization:error-spans-by-operation"
+  "visualization:top-operations-latency-table"
   "dashboard:observe-it-metrics-overview"
+  "dashboard:observe-it-traces-overview"
 )
 
 for expected_obj in "${EXPECTED_SAVED_OBJECTS[@]}"; do
@@ -680,7 +994,7 @@ for expected_obj in "${EXPECTED_SAVED_OBJECTS[@]}"; do
   echo "✔ Saved object present: ${expected_obj}"
 done
 
-for pattern_id in "ss4o_logs" "ss4o_metrics"; do
+for pattern_id in "ss4o_logs" "ss4o_metrics" "ss4o_traces"; do
   INDEX_PATTERN_HAS_TIMESTAMP="$(curl -fsS -H "osd-xsrf: true" \
     "http://localhost:5601/api/saved_objects/index-pattern/${pattern_id}" | \
     jq -r '.attributes.fields // ""' | jq -r '[.[] | select(.name == "@timestamp")] | length')"
@@ -691,7 +1005,18 @@ for pattern_id in "ss4o_logs" "ss4o_metrics"; do
   fi
   echo "✔ Index pattern ${pattern_id} has populated fields containing '@timestamp'."
 done
-echo "Gate 6 PASSED: OpenSearch Dashboards Saved Objects Gate"
+
+for log_search_id in "all-order-logs" "warnings-and-rejections" "gateway-timeouts-and-errors" "checkout-scenario-explorer"; do
+  HAS_TRACE_ID_COL="$(curl -fsS -H "osd-xsrf: true" \
+    "http://localhost:5601/api/saved_objects/search/${log_search_id}" | \
+    jq -r '.attributes.columns | index("traceId") != null')"
+  if [ "${HAS_TRACE_ID_COL}" != "true" ]; then
+    echo "FAIL: Log saved search '${log_search_id}' does not include 'traceId' in columns."
+    exit 1
+  fi
+  echo "✔ Log saved search '${log_search_id}' includes 'traceId' column."
+done
+echo "Gate 7 PASSED: OpenSearch Dashboards Saved Objects Gate"
 
 echo ""
 echo "========================================================================"
