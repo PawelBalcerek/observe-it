@@ -1,0 +1,11 @@
+{
+  "description": "Observe-it traces timestamp, duration, resource promotion, and attribute cleanup pipeline",
+  "processors": [
+    {
+      "script": {
+        "description": "Set @timestamp from startTime, compute durationInNanos/durationMs, promote service/serviceName/version/env, and remove attributes.data_stream",
+        "source": "if (ctx.startTime != null) { ctx['@timestamp'] = ctx.startTime; if (ctx.endTime != null) { long nanos = Duration.between(Instant.parse(ctx.startTime), Instant.parse(ctx.endTime)).toNanos(); if (nanos < 0L) { nanos = 0L; } ctx.durationInNanos = nanos; ctx.durationMs = nanos / 1000000.0d; } } if (ctx.resource != null) { if (ctx.resource['service.name'] != null) { ctx.service = ctx.resource['service.name']; ctx.serviceName = ctx.resource['service.name']; } if (ctx.resource['service.version'] != null) { ctx.version = ctx.resource['service.version']; } if (ctx.resource['deployment.environment.name'] != null) { ctx.env = ctx.resource['deployment.environment.name']; } } if (ctx.service == null && ctx.serviceName != null) { ctx.service = ctx.serviceName; } if (ctx.attributes != null) { ctx.attributes.remove('data_stream'); }"
+      }
+    }
+  ]
+}
