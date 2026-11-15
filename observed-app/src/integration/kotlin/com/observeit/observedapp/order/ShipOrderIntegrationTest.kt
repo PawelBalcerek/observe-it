@@ -7,9 +7,12 @@ import com.observeit.observedapp.order.OrderFixtures.aShipOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.ShipOrderRequest
 import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertInvalidStateTransitionSpan
 import com.observeit.observedapp.order.assertOrderErrorIncremented
 import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderNotFoundSpan
 import com.observeit.observedapp.order.assertOrderShippedLog
+import com.observeit.observedapp.order.assertOrderShippedSpan
 import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.OrderState.CANCELLED
 import com.observeit.observedapp.order.domain.OrderState.PAID
@@ -52,6 +55,7 @@ class ShipOrderIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderShippedLog(orderId = created.orderId, checkoutScenario = "happy-path")
         metricCapture.assertStateTransitionIncremented(previousState = PAID, state = SHIPPED)
+        spanCapture.assertOrderShippedSpan(orderId = created.orderId, checkoutScenario = "happy-path")
     }
 
     @ParameterizedTest(name = "{0}")
@@ -78,6 +82,11 @@ class ShipOrderIntegrationTest : IntegrationTest() {
 
         // and
         logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "ship-miss")
+        spanCapture.assertOrderNotFoundSpan(
+            spanName = "order.ship",
+            orderId = "non-existent-order",
+            checkoutScenario = "ship-miss",
+        )
     }
 
     @Test
@@ -108,6 +117,12 @@ class ShipOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "invalid-transition",
         )
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.ship",
+            orderId = created.orderId,
+            attemptedAction = "ship",
+            checkoutScenario = "invalid-transition",
+        )
     }
 
     companion object {

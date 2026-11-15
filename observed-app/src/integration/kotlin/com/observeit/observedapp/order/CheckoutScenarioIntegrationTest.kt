@@ -11,22 +11,36 @@ import com.observeit.observedapp.order.OrderFixtures.anOrderLineItemResponse
 import com.observeit.observedapp.order.OrderFixtures.anOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertInvalidStateTransitionSpan
 import com.observeit.observedapp.order.assertInventoryReservationIncremented
+import com.observeit.observedapp.order.assertInventoryReservationSpanEvent
 import com.observeit.observedapp.order.assertInventoryReservedLog
 import com.observeit.observedapp.order.assertLowStockWarningLog
 import com.observeit.observedapp.order.assertOrderCancelledLog
+import com.observeit.observedapp.order.assertOrderCancelledSpan
 import com.observeit.observedapp.order.assertOrderCreatedLog
+import com.observeit.observedapp.order.assertOrderCreatedSpan
 import com.observeit.observedapp.order.assertOrderErrorIncremented
+import com.observeit.observedapp.order.assertOrderOutOfStockSpan
 import com.observeit.observedapp.order.assertOrderPaidLog
+import com.observeit.observedapp.order.assertOrderPaidSpan
 import com.observeit.observedapp.order.assertOrderReservedLog
+import com.observeit.observedapp.order.assertOrderReservedSpan
 import com.observeit.observedapp.order.assertOrderRetrievedLog
+import com.observeit.observedapp.order.assertOrderRetrievedSpan
 import com.observeit.observedapp.order.assertOrderShippedLog
+import com.observeit.observedapp.order.assertOrderShippedSpan
 import com.observeit.observedapp.order.assertOrdersCreatedIncremented
 import com.observeit.observedapp.order.assertOutOfStockLog
 import com.observeit.observedapp.order.assertPaymentDeclinedLog
+import com.observeit.observedapp.order.assertPaymentDeclinedProcessSpan
+import com.observeit.observedapp.order.assertPaymentDeclinedSpan
 import com.observeit.observedapp.order.assertPaymentDurationRecorded
 import com.observeit.observedapp.order.assertPaymentGatewayTimeoutLog
+import com.observeit.observedapp.order.assertPaymentProcessSpan
 import com.observeit.observedapp.order.assertPaymentTimeoutDurationRecorded
+import com.observeit.observedapp.order.assertPaymentTimeoutProcessSpan
+import com.observeit.observedapp.order.assertPaymentTimeoutSpan
 import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.InventoryOutcome
 import com.observeit.observedapp.order.domain.InventoryOutcome.LOW_STOCK_WARNING
@@ -97,20 +111,36 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertInventoryReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertInventoryReservationSpanEvent()
 
         logCapture.assertOrderPaidLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = PAID)
         metricCapture.assertPaymentDurationRecorded()
+        val paySpan = spanCapture.assertOrderPaidSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertPaymentProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = checkoutScenario,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
 
         logCapture.assertOrderShippedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = PAID, state = SHIPPED)
+        spanCapture.assertOrderShippedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = SHIPPED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = SHIPPED,
             checkoutScenario = checkoutScenario,
@@ -162,20 +192,40 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertLowStockWarningLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(sku = "SKU-LOW-STOCK", outcome = LOW_STOCK_WARNING)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertInventoryReservationSpanEvent(
+            sku = "SKU-LOW-STOCK",
+            availableQuantity = 2L,
+            outcome = LOW_STOCK_WARNING,
+        )
 
         logCapture.assertOrderPaidLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = PAID)
         metricCapture.assertPaymentDurationRecorded()
+        val paySpan = spanCapture.assertOrderPaidSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertPaymentProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = checkoutScenario,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
 
         logCapture.assertOrderShippedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = PAID, state = SHIPPED)
+        spanCapture.assertOrderShippedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = SHIPPED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = SHIPPED,
             checkoutScenario = checkoutScenario,
@@ -218,13 +268,29 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertOutOfStockLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = FAILED)
         metricCapture.assertInventoryReservationIncremented(sku = "SKU-OUT-OF-STOCK", outcome = OUT_OF_STOCK)
         metricCapture.assertOrderErrorIncremented("OUT_OF_STOCK")
+        spanCapture.assertOrderOutOfStockSpan(
+            orderId = created.orderId,
+            sku = "SKU-OUT-OF-STOCK",
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertInventoryReservationSpanEvent(
+            sku = "SKU-OUT-OF-STOCK",
+            availableQuantity = 0L,
+            outcome = OUT_OF_STOCK,
+        )
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = FAILED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = FAILED,
             checkoutScenario = checkoutScenario,
@@ -270,18 +336,36 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertInventoryReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertInventoryReservationSpanEvent()
 
         logCapture.assertPaymentDeclinedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
         metricCapture.assertPaymentDurationRecorded(method = DECLINED_CARD, outcome = DECLINED)
         metricCapture.assertOrderErrorIncremented("PAYMENT_DECLINED")
+        val paySpan = spanCapture.assertPaymentDeclinedSpan(
+            orderId = created.orderId,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertPaymentDeclinedProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = checkoutScenario,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = FAILED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = FAILED,
             checkoutScenario = checkoutScenario,
@@ -327,18 +411,36 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertInventoryReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertInventoryReservationSpanEvent()
 
         logCapture.assertPaymentGatewayTimeoutLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
         metricCapture.assertPaymentTimeoutDurationRecorded()
         metricCapture.assertOrderErrorIncremented("GATEWAY_TIMEOUT")
+        val paySpan = spanCapture.assertPaymentTimeoutSpan(
+            orderId = created.orderId,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertPaymentTimeoutProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = checkoutScenario,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = FAILED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = FAILED,
             checkoutScenario = checkoutScenario,
@@ -384,11 +486,14 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertInventoryReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertInventoryReservationSpanEvent()
 
         logCapture.assertOrderCancelledLog(
             orderId = created.orderId,
@@ -397,8 +502,19 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
             checkoutScenario = checkoutScenario,
         )
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = CANCELLED)
+        spanCapture.assertOrderCancelledSpan(
+            orderId = created.orderId,
+            previousState = RESERVED,
+            reason = "buyer cancellation request",
+            checkoutScenario = checkoutScenario,
+        )
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = CANCELLED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = CANCELLED,
             checkoutScenario = checkoutScenario,
@@ -451,11 +567,14 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
         // and
         logCapture.assertOrderCreatedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
 
         logCapture.assertInventoryReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = checkoutScenario)
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = checkoutScenario)
+        spanCapture.assertInventoryReservationSpanEvent()
 
         logCapture.assertOrderCancelledLog(
             orderId = created.orderId,
@@ -464,6 +583,12 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
             checkoutScenario = checkoutScenario,
         )
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = CANCELLED)
+        spanCapture.assertOrderCancelledSpan(
+            orderId = created.orderId,
+            previousState = RESERVED,
+            reason = "cancelling before invalid pay",
+            checkoutScenario = checkoutScenario,
+        )
 
         logCapture.assertInvalidStateTransitionLog(
             orderId = created.orderId,
@@ -472,8 +597,19 @@ class CheckoutScenarioIntegrationTest : IntegrationTest() {
             checkoutScenario = checkoutScenario,
         )
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.pay",
+            orderId = created.orderId,
+            attemptedAction = "pay",
+            checkoutScenario = checkoutScenario,
+        )
 
         logCapture.assertOrderRetrievedLog(
+            orderId = created.orderId,
+            state = CANCELLED,
+            checkoutScenario = checkoutScenario,
+        )
+        spanCapture.assertOrderRetrievedSpan(
             orderId = created.orderId,
             state = CANCELLED,
             checkoutScenario = checkoutScenario,

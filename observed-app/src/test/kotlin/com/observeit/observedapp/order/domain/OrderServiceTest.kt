@@ -1,23 +1,39 @@
 package com.observeit.observedapp.order.domain
 
 import ch.qos.logback.classic.Level.DEBUG
+import com.observeit.observedapp.correlation.CorrelationContext
 import com.observeit.observedapp.order.FakePaymentGateway
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
+import com.observeit.observedapp.order.assertInvalidStateTransitionSpan
 import com.observeit.observedapp.order.assertInventoryReservationIncremented
+import com.observeit.observedapp.order.assertInventoryReservationSpanEvent
 import com.observeit.observedapp.order.assertInventoryReservedLog
 import com.observeit.observedapp.order.assertLowStockWarningLog
 import com.observeit.observedapp.order.assertOrderCancelledLog
+import com.observeit.observedapp.order.assertOrderCancelledSpan
 import com.observeit.observedapp.order.assertOrderCreatedLog
+import com.observeit.observedapp.order.assertOrderCreatedSpan
 import com.observeit.observedapp.order.assertOrderErrorIncremented
+import com.observeit.observedapp.order.assertOrderNotFoundSpan
+import com.observeit.observedapp.order.assertOrderOutOfStockSpan
 import com.observeit.observedapp.order.assertOrderPaidLog
+import com.observeit.observedapp.order.assertOrderPaidSpan
 import com.observeit.observedapp.order.assertOrderRepositorySizeGauge
 import com.observeit.observedapp.order.assertOrderReservedLog
+import com.observeit.observedapp.order.assertOrderReservedSpan
 import com.observeit.observedapp.order.assertOrderRetrievedLog
+import com.observeit.observedapp.order.assertOrderRetrievedSpan
 import com.observeit.observedapp.order.assertOrderShippedLog
+import com.observeit.observedapp.order.assertOrderShippedSpan
 import com.observeit.observedapp.order.assertOrdersCreatedIncremented
+import com.observeit.observedapp.order.assertPaymentDeclinedProcessSpan
+import com.observeit.observedapp.order.assertPaymentDeclinedSpan
 import com.observeit.observedapp.order.assertPaymentDurationRecorded
+import com.observeit.observedapp.order.assertPaymentProcessSpan
 import com.observeit.observedapp.order.assertPaymentTimeoutDurationRecorded
+import com.observeit.observedapp.order.assertPaymentTimeoutProcessSpan
+import com.observeit.observedapp.order.assertPaymentTimeoutSpan
 import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.InventoryOutcome.LOW_STOCK_WARNING
 import com.observeit.observedapp.order.domain.InventoryOutcome.OUT_OF_STOCK
@@ -34,16 +50,26 @@ import com.observeit.observedapp.order.domain.PaymentOutcome.DECLINED
 import com.observeit.observedapp.order.domain.ShippingMethod.STANDARD
 import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.order.infrastructure.OtelOrderMetrics
+import com.observeit.observedapp.order.infrastructure.OtelOrderTracer
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.MetricCapture
+import com.observeit.observedapp.test.SpanCapture
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.opentelemetry.api.trace.SpanKind.SERVER
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import org.slf4j.MDC
 import java.math.BigDecimal
 
 class OrderServiceTest {
+
+    @AfterEach
+    fun clearCorrelation() {
+        CorrelationContext.clear()
+    }
 
     @JvmField
     @RegisterExtension
@@ -53,10 +79,15 @@ class OrderServiceTest {
     @RegisterExtension
     val metricCapture = MetricCapture()
 
+    @JvmField
+    @RegisterExtension
+    val spanCapture = SpanCapture()
+
     private val repository = InMemoryOrderRepository()
     private val paymentGateway = FakePaymentGateway()
     private val orderMetrics = OtelOrderMetrics(metricCapture.openTelemetry, repository)
-    private val service = OrderService(repository, paymentGateway, orderMetrics)
+    private val orderTracer = OtelOrderTracer(spanCapture.openTelemetry)
+    private val service = OrderService(repository, paymentGateway, orderMetrics, orderTracer)
 
     @Test
     fun `creates order, populates correlation, stores in repository, and emits structured log`() {
@@ -85,6 +116,13 @@ class OrderServiceTest {
         // and
         metricCapture.assertOrdersCreatedIncremented()
         metricCapture.assertOrderRepositorySizeGauge(1L)
+
+        // and
+        spanCapture.assertOrderCreatedSpan(
+            orderId = order.id,
+            totalAmount = 37.0,
+            itemCount = 5L,
+        )
     }
 
     @Test
@@ -100,6 +138,9 @@ class OrderServiceTest {
 
         // and
         logCapture.assertOrderRetrievedLog(orderId = existingOrder.id)
+
+        // and
+        spanCapture.assertOrderRetrievedSpan(orderId = existingOrder.id)
     }
 
     @Test
@@ -111,6 +152,9 @@ class OrderServiceTest {
 
         // then
         exception shouldBe OrderNotFoundException("non-existent-id")
+
+        // and
+        spanCapture.assertOrderNotFoundSpan(spanName = "order.get", orderId = "non-existent-id")
     }
 
     @Test
@@ -136,6 +180,10 @@ class OrderServiceTest {
         // and
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+
+        // and
+        spanCapture.assertOrderReservedSpan(orderId = existingOrder.id)
+        spanCapture.assertInventoryReservationSpanEvent()
     }
 
     @Test
@@ -156,6 +204,14 @@ class OrderServiceTest {
         // and
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(sku = "SKU-LOW-STOCK", outcome = LOW_STOCK_WARNING)
+
+        // and
+        spanCapture.assertOrderReservedSpan(orderId = existingOrder.id)
+        spanCapture.assertInventoryReservationSpanEvent(
+            sku = "SKU-LOW-STOCK",
+            availableQuantity = 2L,
+            outcome = LOW_STOCK_WARNING,
+        )
     }
 
     @Test
@@ -183,6 +239,14 @@ class OrderServiceTest {
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = FAILED)
         metricCapture.assertInventoryReservationIncremented(sku = "SKU-OUT-OF-STOCK", outcome = OUT_OF_STOCK)
         metricCapture.assertOrderErrorIncremented("OUT_OF_STOCK")
+
+        // and
+        spanCapture.assertOrderOutOfStockSpan(orderId = existingOrder.id, sku = "SKU-OUT-OF-STOCK")
+        spanCapture.assertInventoryReservationSpanEvent(
+            sku = "SKU-OUT-OF-STOCK",
+            availableQuantity = 0L,
+            outcome = OUT_OF_STOCK,
+        )
     }
 
     @Test
@@ -194,6 +258,9 @@ class OrderServiceTest {
 
         // then
         exception shouldBe OrderNotFoundException("non-existent-id")
+
+        // and
+        spanCapture.assertOrderNotFoundSpan(spanName = "order.reserve", orderId = "non-existent-id")
     }
 
     @Test
@@ -216,6 +283,14 @@ class OrderServiceTest {
         // and
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = PAID)
         metricCapture.assertPaymentDurationRecorded()
+
+        // and
+        val paySpan = spanCapture.assertOrderPaidSpan(orderId = existingOrder.id)
+        spanCapture.assertPaymentProcessSpan(
+            orderId = existingOrder.id,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
     }
 
     @Test
@@ -238,6 +313,14 @@ class OrderServiceTest {
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
         metricCapture.assertPaymentDurationRecorded(method = DECLINED_CARD, outcome = DECLINED)
         metricCapture.assertOrderErrorIncremented("PAYMENT_DECLINED")
+
+        // and
+        val paySpan = spanCapture.assertPaymentDeclinedSpan(orderId = existingOrder.id)
+        spanCapture.assertPaymentDeclinedProcessSpan(
+            orderId = existingOrder.id,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
     }
 
     @Test
@@ -264,6 +347,14 @@ class OrderServiceTest {
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
         metricCapture.assertPaymentTimeoutDurationRecorded()
         metricCapture.assertOrderErrorIncremented("GATEWAY_TIMEOUT")
+
+        // and
+        val paySpan = spanCapture.assertPaymentTimeoutSpan(orderId = existingOrder.id)
+        spanCapture.assertPaymentTimeoutProcessSpan(
+            orderId = existingOrder.id,
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
     }
 
     @Test
@@ -275,6 +366,9 @@ class OrderServiceTest {
 
         // then
         exception shouldBe OrderNotFoundException("non-existent-id")
+
+        // and
+        spanCapture.assertOrderNotFoundSpan(spanName = "order.pay", orderId = "non-existent-id")
     }
 
     @Test
@@ -296,6 +390,9 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertStateTransitionIncremented(previousState = PAID, state = SHIPPED)
+
+        // and
+        spanCapture.assertOrderShippedSpan(orderId = existingOrder.id)
     }
 
     @Test
@@ -321,6 +418,13 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = CANCELLED)
+
+        // and
+        spanCapture.assertOrderCancelledSpan(
+            orderId = existingOrder.id,
+            previousState = CREATED,
+            reason = "buyer changed mind",
+        )
     }
 
     @Test
@@ -346,6 +450,13 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = CANCELLED)
+
+        // and
+        spanCapture.assertOrderCancelledSpan(
+            orderId = existingOrder.id,
+            previousState = RESERVED,
+            reason = "item no longer needed",
+        )
     }
 
     @Test
@@ -357,6 +468,9 @@ class OrderServiceTest {
 
         // then
         exception shouldBe OrderNotFoundException("non-existent-id")
+
+        // and
+        spanCapture.assertOrderNotFoundSpan(spanName = "order.cancel", orderId = "non-existent-id")
     }
 
     @Test
@@ -381,6 +495,13 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+
+        // and
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.reserve",
+            orderId = existingOrder.id,
+            attemptedAction = "reserve",
+        )
     }
 
     @Test
@@ -405,6 +526,13 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+
+        // and
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.pay",
+            orderId = existingOrder.id,
+            attemptedAction = "pay",
+        )
     }
 
     @Test
@@ -429,6 +557,13 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+
+        // and
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.ship",
+            orderId = existingOrder.id,
+            attemptedAction = "ship",
+        )
     }
 
     @Test
@@ -453,6 +588,13 @@ class OrderServiceTest {
 
         // and
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+
+        // and
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.cancel",
+            orderId = existingOrder.id,
+            attemptedAction = "cancel",
+        )
     }
 
     @Test
@@ -464,5 +606,37 @@ class OrderServiceTest {
 
         // then
         exception shouldBe OrderNotFoundException("non-existent-id")
+
+        // and
+        spanCapture.assertOrderNotFoundSpan(spanName = "order.ship", orderId = "non-existent-id")
+    }
+
+    @Test
+    fun `enriches active parent SERVER span with customer id during order lookup`() {
+        // given
+        val existingOrder = repository.save(anOrder())
+        val serverSpan = spanCapture.openTelemetry.getTracer("test")
+            .spanBuilder("GET /api/orders/{orderId}")
+            .setSpanKind(SERVER)
+            .startSpan()
+
+        // when
+        serverSpan.makeCurrent().use {
+            CorrelationContext.setOrderId(existingOrder.id)
+            service.getOrder(existingOrder.id)
+        }
+        serverSpan.end()
+
+        // then
+        spanCapture.assertSpanRecorded(
+            name = "GET /api/orders/{orderId}",
+            kind = SERVER,
+            attributes = mapOf(
+                "order.id" to existingOrder.id,
+                "customer.id" to "customerId",
+            ),
+        )
+        MDC.get("order.id") shouldBe existingOrder.id
+        CorrelationContext.getCustomerId() shouldBe "customerId"
     }
 }

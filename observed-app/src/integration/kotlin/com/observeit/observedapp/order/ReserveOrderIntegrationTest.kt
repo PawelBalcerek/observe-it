@@ -6,12 +6,17 @@ import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.aReserveOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertInvalidStateTransitionSpan
 import com.observeit.observedapp.order.assertInventoryReservationIncremented
+import com.observeit.observedapp.order.assertInventoryReservationSpanEvent
 import com.observeit.observedapp.order.assertInventoryReservedLog
 import com.observeit.observedapp.order.assertLowStockWarningLog
 import com.observeit.observedapp.order.assertOrderErrorIncremented
 import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderNotFoundSpan
+import com.observeit.observedapp.order.assertOrderOutOfStockSpan
 import com.observeit.observedapp.order.assertOrderReservedLog
+import com.observeit.observedapp.order.assertOrderReservedSpan
 import com.observeit.observedapp.order.assertOutOfStockLog
 import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.InventoryOutcome
@@ -53,6 +58,8 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         logCapture.assertOrderReservedLog(orderId = created.orderId, checkoutScenario = "happy-path")
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(outcome = InventoryOutcome.RESERVED)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = "happy-path")
+        spanCapture.assertInventoryReservationSpanEvent()
     }
 
     @Test
@@ -72,6 +79,12 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         logCapture.assertLowStockWarningLog(orderId = created.orderId, checkoutScenario = "low-stock")
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = RESERVED)
         metricCapture.assertInventoryReservationIncremented(sku = "SKU-LOW-STOCK", outcome = LOW_STOCK_WARNING)
+        spanCapture.assertOrderReservedSpan(orderId = created.orderId, checkoutScenario = "low-stock")
+        spanCapture.assertInventoryReservationSpanEvent(
+            sku = "SKU-LOW-STOCK",
+            availableQuantity = 2L,
+            outcome = LOW_STOCK_WARNING,
+        )
     }
 
     @Test
@@ -84,6 +97,11 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
 
         // and
         logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "reserve-miss")
+        spanCapture.assertOrderNotFoundSpan(
+            spanName = "order.reserve",
+            orderId = "non-existent-order",
+            checkoutScenario = "reserve-miss",
+        )
     }
 
     @Test
@@ -110,6 +128,12 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "invalid-transition",
         )
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.reserve",
+            orderId = created.orderId,
+            attemptedAction = "reserve",
+            checkoutScenario = "invalid-transition",
+        )
     }
 
     @Test
@@ -134,5 +158,15 @@ class ReserveOrderIntegrationTest : IntegrationTest() {
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = FAILED)
         metricCapture.assertInventoryReservationIncremented(sku = "SKU-OUT-OF-STOCK", outcome = OUT_OF_STOCK)
         metricCapture.assertOrderErrorIncremented("OUT_OF_STOCK")
+        spanCapture.assertOrderOutOfStockSpan(
+            orderId = created.orderId,
+            sku = "SKU-OUT-OF-STOCK",
+            checkoutScenario = "out-of-stock",
+        )
+        spanCapture.assertInventoryReservationSpanEvent(
+            sku = "SKU-OUT-OF-STOCK",
+            availableQuantity = 0L,
+            outcome = OUT_OF_STOCK,
+        )
     }
 }
