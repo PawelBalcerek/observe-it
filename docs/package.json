@@ -11,7 +11,7 @@
     "test": "node --test scripts/*.test.mjs"
   },
   "devDependencies": {
-    "markdownlint-cli2": "^0.24.0",
+    "markdownlint-cli2": "^0.24.1",
     "mermaid": "^11.17.2",
     "vitepress": "^1.6.4",
     "vitepress-mermaid-renderer": "^1.2.3",
