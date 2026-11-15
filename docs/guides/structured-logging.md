@@ -407,7 +407,7 @@ is stored in OpenSearch as the following JSON document in `ss4o_logs-observe-it-
   "observedTimestamp": "2026-11-04T15:30:00.123500000Z",
   "level": "INFO",
   "service": "observed-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "env": "local",
   "logger": "com.observeit.observedapp.order.domain.OrderService",
   "message": "Order paid",

@@ -13,6 +13,7 @@ docs/
 │   ├── observability-stack.md
 │   ├── structured-logging.md
 │   ├── metrics-and-dashboards.md
+│   ├── distributed-tracing.md
 │   └── exploring-telemetry.md
 ├── adr/                     ← Append-only Architecture Decision Records
 │   ├── index.md
@@ -160,7 +161,7 @@ line or `## Context` section.
   for vendor fundamentals.
 - **Domain glossary (`CONTEXT.md`) adherence**: Use the canonical terms defined in `CONTEXT.md` (**Observed App**,
   **Traffic Generator**, **Order**, **Order State**, **Order Line Item**, **Checkout Scenario**, **SS4O Log Index**,
-  **SS4O Metrics Index**) and avoid the listed _Avoid_ synonyms.
+  **SS4O Metrics Index**, **SS4O Traces Index**) and avoid the listed _Avoid_ synonyms.
 
 ## 5. Verification (`make docs-build`)
 

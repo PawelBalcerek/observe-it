@@ -59,6 +59,10 @@ export default defineConfig({
               link: '/guides/metrics-and-dashboards',
             },
             {
+              text: 'Distributed Tracing & Cross-Signal Correlation in Kotlin & Spring Boot',
+              link: '/guides/distributed-tracing',
+            },
+            {
               text: 'Checkout Scenarios & Dashboards Walkthrough',
               link: '/guides/exploring-telemetry',
             },
@@ -95,6 +99,14 @@ export default defineConfig({
             {
               text: '0007: SS4O Metrics Delta Temporality & Normalization',
               link: '/adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization',
+            },
+            {
+              text: '0008: OTel Distributed Tracing & Domain Span Ports',
+              link: '/adr/0008-otel-distributed-tracing-and-domain-span-ports',
+            },
+            {
+              text: '0009: SS4O Traces Normalization & Dashboards',
+              link: '/adr/0009-ss4o-traces-ingest-normalization-and-dashboards-exploration',
             },
           ],
         },
