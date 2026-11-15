@@ -2,6 +2,9 @@ package com.observeit.observedapp.order.domain
 
 object OrderTelemetry {
     object Key {
+        const val ORDER_ID = "order.id"
+        const val CUSTOMER_ID = "customer.id"
+        const val CHECKOUT_SCENARIO = "checkout.scenario"
         const val ORDER_STATE = "order.state"
         const val ORDER_PREVIOUS_STATE = "order.previous_state"
         const val ORDER_TOTAL_AMOUNT = "order.total_amount"
@@ -21,6 +24,7 @@ object OrderTelemetry {
     }
 
     object ErrorType {
+        const val ORDER_NOT_FOUND = "ORDER_NOT_FOUND"
         const val INVALID_STATE_TRANSITION = "INVALID_STATE_TRANSITION"
         const val OUT_OF_STOCK = "OUT_OF_STOCK"
         const val PAYMENT_DECLINED = "PAYMENT_DECLINED"

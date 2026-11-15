@@ -5,7 +5,9 @@ import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.OrderFixtures.anOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderNotFoundSpan
 import com.observeit.observedapp.order.assertOrderRetrievedLog
+import com.observeit.observedapp.order.assertOrderRetrievedSpan
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeNotFoundError
 import io.kotest.matchers.shouldBe
@@ -36,6 +38,10 @@ class GetOrderIntegrationTest : IntegrationTest() {
             orderId = created.orderId,
             checkoutScenario = "happy-path",
         )
+        spanCapture.assertOrderRetrievedSpan(
+            orderId = created.orderId,
+            checkoutScenario = "happy-path",
+        )
     }
 
     @Test
@@ -48,6 +54,11 @@ class GetOrderIntegrationTest : IntegrationTest() {
 
         // and
         logCapture.assertOrderNotFoundLog(
+            orderId = "non-existent-order",
+            checkoutScenario = "lookup-miss",
+        )
+        spanCapture.assertOrderNotFoundSpan(
+            spanName = "order.get",
             orderId = "non-existent-order",
             checkoutScenario = "lookup-miss",
         )

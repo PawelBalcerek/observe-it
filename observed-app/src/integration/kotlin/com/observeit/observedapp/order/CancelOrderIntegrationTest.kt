@@ -7,9 +7,12 @@ import com.observeit.observedapp.order.OrderFixtures.aCreateOrderRequest
 import com.observeit.observedapp.order.api.CancelOrderRequest
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertInvalidStateTransitionSpan
 import com.observeit.observedapp.order.assertOrderCancelledLog
+import com.observeit.observedapp.order.assertOrderCancelledSpan
 import com.observeit.observedapp.order.assertOrderErrorIncremented
 import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderNotFoundSpan
 import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.OrderState.CANCELLED
 import com.observeit.observedapp.order.domain.OrderState.CREATED
@@ -57,6 +60,12 @@ class CancelOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "buyer-cancellation",
         )
         metricCapture.assertStateTransitionIncremented(previousState = CREATED, state = CANCELLED)
+        spanCapture.assertOrderCancelledSpan(
+            orderId = created.orderId,
+            previousState = CREATED,
+            reason = "buyer changed mind",
+            checkoutScenario = "buyer-cancellation",
+        )
     }
 
     @Test
@@ -83,6 +92,12 @@ class CancelOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "buyer-cancellation",
         )
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = CANCELLED)
+        spanCapture.assertOrderCancelledSpan(
+            orderId = created.orderId,
+            previousState = RESERVED,
+            reason = "item no longer needed",
+            checkoutScenario = "buyer-cancellation",
+        )
     }
 
     @ParameterizedTest(name = "{0}")
@@ -109,6 +124,11 @@ class CancelOrderIntegrationTest : IntegrationTest() {
 
         // and
         logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "cancel-miss")
+        spanCapture.assertOrderNotFoundSpan(
+            spanName = "order.cancel",
+            orderId = "non-existent-order",
+            checkoutScenario = "cancel-miss",
+        )
     }
 
     @Test
@@ -141,6 +161,12 @@ class CancelOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "invalid-transition",
         )
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.cancel",
+            orderId = created.orderId,
+            attemptedAction = "cancel",
+            checkoutScenario = "invalid-transition",
+        )
     }
 
     companion object {

@@ -19,6 +19,7 @@ class OrderService(
     private val orderRepository: OrderRepository,
     private val paymentGateway: PaymentGateway,
     private val orderMetrics: OrderMetrics,
+    private val orderTracer: OrderTracer,
 ) {
     private val logger = LoggerFactory.getLogger(OrderService::class.java)
 
@@ -26,26 +27,28 @@ class OrderService(
         val orderId = UUID.randomUUID().toString()
         CorrelationContext.populateOrderCorrelation(orderId, customerId)
 
-        val order = Order(
-            id = orderId,
-            customerId = customerId,
-            items = items,
-        )
+        return orderTracer.traceCreateOrder {
+            val order = Order(
+                id = orderId,
+                customerId = customerId,
+                items = items,
+            )
 
-        val saved = orderRepository.save(order)
-        orderMetrics.recordOrderCreated(saved.currency)
+            val saved = orderRepository.save(order)
+            orderMetrics.recordOrderCreated(saved.currency)
 
-        logger.atInfo()
-            .addKeyValue(Key.ORDER_STATE, saved.state.name)
-            .addKeyValue(Key.ORDER_TOTAL_AMOUNT, saved.totalAmount.toDouble())
-            .addKeyValue(Key.ORDER_CURRENCY, saved.currency.currencyCode)
-            .addKeyValue(Key.ORDER_ITEM_COUNT, saved.itemCount)
-            .log("Order created")
+            logger.atInfo()
+                .addKeyValue(Key.ORDER_STATE, saved.state.name)
+                .addKeyValue(Key.ORDER_TOTAL_AMOUNT, saved.totalAmount.toDouble())
+                .addKeyValue(Key.ORDER_CURRENCY, saved.currency.currencyCode)
+                .addKeyValue(Key.ORDER_ITEM_COUNT, saved.itemCount)
+                .log("Order created")
 
-        return saved
+            saved
+        }
     }
 
-    fun getOrder(orderId: String): Order {
+    fun getOrder(orderId: String): Order = orderTracer.traceGetOrder(orderId) {
         val order = loadOrderWithCorrelation(orderId)
 
         logger.atInfo()
@@ -55,10 +58,10 @@ class OrderService(
             .addKeyValue(Key.ORDER_ITEM_COUNT, order.itemCount)
             .log("Order retrieved")
 
-        return order
+        order
     }
 
-    fun reserveOrder(orderId: String): Order {
+    fun reserveOrder(orderId: String): Order = orderTracer.traceReserveOrder(orderId) { span ->
         val order = loadOrderWithCorrelation(orderId)
         val previousState = order.state
         val reserved = withStateTransitionErrorRecording { order.reserve() }
@@ -69,6 +72,13 @@ class OrderService(
             orderMetrics.recordStateTransition(previousState, FAILED)
             orderMetrics.recordInventoryReservation(outOfStockItem.sku, OUT_OF_STOCK)
             orderMetrics.recordError(ErrorType.OUT_OF_STOCK)
+            span.recordInventoryReservation(
+                sku = outOfStockItem.sku,
+                requestedQuantity = outOfStockItem.quantity.toLong(),
+                availableQuantity = OUT_OF_STOCK_AVAILABLE_QUANTITY,
+                outcome = OUT_OF_STOCK,
+            )
+            span.recordStateTransition(previousState, FAILED)
             throw OutOfStockException(
                 sku = outOfStockItem.sku,
                 requestedQuantity = outOfStockItem.quantity.toLong(),
@@ -78,93 +88,105 @@ class OrderService(
 
         orderRepository.save(reserved)
         orderMetrics.recordStateTransition(previousState, reserved.state)
+        span.recordStateTransition(previousState, reserved.state)
 
-        reserved.items.forEach { item ->
-            val outcome = if (item.sku == SKU_LOW_STOCK) {
-                LOW_STOCK_WARNING
-            } else {
-                RESERVED
-            }
-            orderMetrics.recordInventoryReservation(item.sku, outcome)
-
-            if (item.sku == SKU_LOW_STOCK) {
-                logger.atWarn()
-                    .addKeyValue(Key.INVENTORY_SKU, item.sku)
-                    .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, item.quantity.toLong())
-                    .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, LOW_STOCK_AVAILABLE_QUANTITY)
-                    .log("Low stock for ${item.sku} (${item.quantity}/$LOW_STOCK_AVAILABLE_QUANTITY)")
-            } else {
-                logger.atDebug()
-                    .addKeyValue(Key.INVENTORY_SKU, item.sku)
-                    .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, item.quantity.toLong())
-                    .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, STANDARD_AVAILABLE_QUANTITY)
-                    .log("Inventory reserved for ${item.sku} (${item.quantity}/$STANDARD_AVAILABLE_QUANTITY)")
-            }
-        }
+        reserved.items.forEach { item -> reserveItem(item, span) }
 
         logger.atInfo()
             .addKeyValue(Key.ORDER_STATE, reserved.state.name)
             .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
             .log("Order reserved")
 
-        return reserved
+        reserved
     }
 
-    fun payOrder(orderId: String, paymentMethod: PaymentMethod): Order {
-        val order = loadOrderWithCorrelation(orderId)
-        val previousState = order.state
-        val paid = withStateTransitionErrorRecording { order.pay() }
+    private fun reserveItem(item: OrderLineItem, span: OrderReservationSpan) {
+        val isLowStock = item.sku == SKU_LOW_STOCK
+        val outcome = if (isLowStock) LOW_STOCK_WARNING else RESERVED
+        val availableQuantity = if (isLowStock) LOW_STOCK_AVAILABLE_QUANTITY else STANDARD_AVAILABLE_QUANTITY
 
-        executePayment(order, previousState, paymentMethod)
+        orderMetrics.recordInventoryReservation(item.sku, outcome)
+        span.recordInventoryReservation(
+            sku = item.sku,
+            requestedQuantity = item.quantity.toLong(),
+            availableQuantity = availableQuantity,
+            outcome = outcome,
+        )
 
-        orderRepository.save(paid)
-        orderMetrics.recordStateTransition(previousState, paid.state)
-
-        logger.atInfo()
-            .addKeyValue(Key.ORDER_STATE, paid.state.name)
-            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
-            .addKeyValue(Key.PAYMENT_METHOD, paymentMethod.name)
-            .addKeyValue(Key.PAYMENT_LATENCY_MS, STANDARD_PAYMENT_LATENCY_MS)
-            .log("Order paid")
-
-        return paid
+        if (isLowStock) {
+            logger.atWarn()
+                .addKeyValue(Key.INVENTORY_SKU, item.sku)
+                .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, item.quantity.toLong())
+                .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, LOW_STOCK_AVAILABLE_QUANTITY)
+                .log("Low stock for ${item.sku} (${item.quantity}/$LOW_STOCK_AVAILABLE_QUANTITY)")
+        } else {
+            logger.atDebug()
+                .addKeyValue(Key.INVENTORY_SKU, item.sku)
+                .addKeyValue(Key.INVENTORY_REQUESTED_QUANTITY, item.quantity.toLong())
+                .addKeyValue(Key.INVENTORY_AVAILABLE_QUANTITY, STANDARD_AVAILABLE_QUANTITY)
+                .log("Inventory reserved for ${item.sku} (${item.quantity}/$STANDARD_AVAILABLE_QUANTITY)")
+        }
     }
 
-    fun shipOrder(orderId: String, shippingMethod: ShippingMethod): Order {
-        val order = loadOrderWithCorrelation(orderId)
-        val previousState = order.state
+    fun payOrder(orderId: String, paymentMethod: PaymentMethod): Order =
+        orderTracer.tracePayOrder(orderId, paymentMethod, STANDARD_PAYMENT_LATENCY_MS) {
+            val order = loadOrderWithCorrelation(orderId)
+            val previousState = order.state
+            val paid = withStateTransitionErrorRecording { order.pay() }
 
-        val toShip = withStateTransitionErrorRecording { order.ship() }
+            executePayment(order, previousState, paymentMethod)
 
-        val shipped = orderRepository.save(toShip)
-        orderMetrics.recordStateTransition(previousState, shipped.state)
+            orderRepository.save(paid)
+            orderMetrics.recordStateTransition(previousState, paid.state)
 
-        logger.atInfo()
-            .addKeyValue(Key.ORDER_STATE, shipped.state.name)
-            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
-            .addKeyValue(Key.SHIPPING_METHOD, shippingMethod.name)
-            .log("Order shipped")
+            logger.atInfo()
+                .addKeyValue(Key.ORDER_STATE, paid.state.name)
+                .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
+                .addKeyValue(Key.PAYMENT_METHOD, paymentMethod.name)
+                .addKeyValue(Key.PAYMENT_LATENCY_MS, STANDARD_PAYMENT_LATENCY_MS)
+                .log("Order paid")
 
-        return shipped
-    }
+            paid
+        }
 
-    fun cancelOrder(orderId: String, reason: String): Order {
-        val order = loadOrderWithCorrelation(orderId)
-        val previousState = order.state
+    fun shipOrder(orderId: String, shippingMethod: ShippingMethod): Order =
+        orderTracer.traceShipOrder(orderId, shippingMethod) {
+            val order = loadOrderWithCorrelation(orderId)
+            val previousState = order.state
 
-        val toCancel = withStateTransitionErrorRecording { order.cancel() }
+            val toShip = withStateTransitionErrorRecording { order.ship() }
 
-        val cancelled = orderRepository.save(toCancel)
-        orderMetrics.recordStateTransition(previousState, cancelled.state)
+            val shipped = orderRepository.save(toShip)
+            orderMetrics.recordStateTransition(previousState, shipped.state)
 
-        logger.atInfo()
-            .addKeyValue(Key.ORDER_STATE, cancelled.state.name)
-            .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
-            .addKeyValue(Key.CANCELLATION_REASON, reason)
-            .log("Order cancelled")
+            logger.atInfo()
+                .addKeyValue(Key.ORDER_STATE, shipped.state.name)
+                .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
+                .addKeyValue(Key.SHIPPING_METHOD, shippingMethod.name)
+                .log("Order shipped")
 
-        return cancelled
-    }
+            shipped
+        }
+
+    fun cancelOrder(orderId: String, reason: String): Order =
+        orderTracer.traceCancelOrder(orderId, reason) { recordPreviousState ->
+            val order = loadOrderWithCorrelation(orderId)
+            val previousState = order.state
+
+            val toCancel = withStateTransitionErrorRecording { order.cancel() }
+            recordPreviousState(previousState)
+
+            val cancelled = orderRepository.save(toCancel)
+            orderMetrics.recordStateTransition(previousState, cancelled.state)
+
+            logger.atInfo()
+                .addKeyValue(Key.ORDER_STATE, cancelled.state.name)
+                .addKeyValue(Key.ORDER_PREVIOUS_STATE, previousState.name)
+                .addKeyValue(Key.CANCELLATION_REASON, reason)
+                .log("Order cancelled")
+
+            cancelled
+        }
 
     private inline fun <T> withStateTransitionErrorRecording(transition: () -> T): T = try {
         transition()
@@ -175,7 +197,9 @@ class OrderService(
 
     private fun executePayment(order: Order, previousState: OrderState, paymentMethod: PaymentMethod) {
         try {
-            paymentGateway.processPayment(order.id, order.totalAmount, order.currency, paymentMethod)
+            orderTracer.tracePaymentExecution(order, paymentMethod, STANDARD_PAYMENT_LATENCY_MS) {
+                paymentGateway.processPayment(order.id, order.totalAmount, order.currency, paymentMethod)
+            }
             orderMetrics.recordPaymentDuration(
                 paymentMethod,
                 SUCCESS,

@@ -7,13 +7,21 @@ import com.observeit.observedapp.order.OrderFixtures.aPayOrderResponse
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.api.PayOrderRequest
 import com.observeit.observedapp.order.assertInvalidStateTransitionLog
+import com.observeit.observedapp.order.assertInvalidStateTransitionSpan
 import com.observeit.observedapp.order.assertOrderErrorIncremented
 import com.observeit.observedapp.order.assertOrderNotFoundLog
+import com.observeit.observedapp.order.assertOrderNotFoundSpan
 import com.observeit.observedapp.order.assertOrderPaidLog
+import com.observeit.observedapp.order.assertOrderPaidSpan
 import com.observeit.observedapp.order.assertPaymentDeclinedLog
+import com.observeit.observedapp.order.assertPaymentDeclinedProcessSpan
+import com.observeit.observedapp.order.assertPaymentDeclinedSpan
 import com.observeit.observedapp.order.assertPaymentDurationRecorded
 import com.observeit.observedapp.order.assertPaymentGatewayTimeoutLog
+import com.observeit.observedapp.order.assertPaymentProcessSpan
 import com.observeit.observedapp.order.assertPaymentTimeoutDurationRecorded
+import com.observeit.observedapp.order.assertPaymentTimeoutProcessSpan
+import com.observeit.observedapp.order.assertPaymentTimeoutSpan
 import com.observeit.observedapp.order.assertStateTransitionIncremented
 import com.observeit.observedapp.order.domain.OrderState.CANCELLED
 import com.observeit.observedapp.order.domain.OrderState.FAILED
@@ -62,6 +70,13 @@ class PayOrderIntegrationTest : IntegrationTest() {
         logCapture.assertOrderPaidLog(orderId = created.orderId, checkoutScenario = "happy-path")
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = PAID)
         metricCapture.assertPaymentDurationRecorded()
+        val paySpan = spanCapture.assertOrderPaidSpan(orderId = created.orderId, checkoutScenario = "happy-path")
+        spanCapture.assertPaymentProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = "happy-path",
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
     }
 
     @ParameterizedTest(name = "{0}")
@@ -88,6 +103,11 @@ class PayOrderIntegrationTest : IntegrationTest() {
 
         // and
         logCapture.assertOrderNotFoundLog(orderId = "non-existent-order", checkoutScenario = "pay-miss")
+        spanCapture.assertOrderNotFoundSpan(
+            spanName = "order.pay",
+            orderId = "non-existent-order",
+            checkoutScenario = "pay-miss",
+        )
     }
 
     @Test
@@ -118,6 +138,12 @@ class PayOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "invalid-transition",
         )
         metricCapture.assertOrderErrorIncremented("INVALID_STATE_TRANSITION")
+        spanCapture.assertInvalidStateTransitionSpan(
+            spanName = "order.pay",
+            orderId = created.orderId,
+            attemptedAction = "pay",
+            checkoutScenario = "invalid-transition",
+        )
     }
 
     @Test
@@ -145,6 +171,16 @@ class PayOrderIntegrationTest : IntegrationTest() {
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
         metricCapture.assertPaymentDurationRecorded(method = DECLINED_CARD, outcome = DECLINED)
         metricCapture.assertOrderErrorIncremented("PAYMENT_DECLINED")
+        val paySpan = spanCapture.assertPaymentDeclinedSpan(
+            orderId = created.orderId,
+            checkoutScenario = "payment-declined",
+        )
+        spanCapture.assertPaymentDeclinedProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = "payment-declined",
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
     }
 
     @Test
@@ -172,6 +208,16 @@ class PayOrderIntegrationTest : IntegrationTest() {
         metricCapture.assertStateTransitionIncremented(previousState = RESERVED, state = FAILED)
         metricCapture.assertPaymentTimeoutDurationRecorded()
         metricCapture.assertOrderErrorIncremented("GATEWAY_TIMEOUT")
+        val paySpan = spanCapture.assertPaymentTimeoutSpan(
+            orderId = created.orderId,
+            checkoutScenario = "gateway-timeout",
+        )
+        spanCapture.assertPaymentTimeoutProcessSpan(
+            orderId = created.orderId,
+            checkoutScenario = "gateway-timeout",
+            traceId = paySpan.traceId,
+            parentSpanId = paySpan.spanId,
+        )
     }
 
     companion object {

@@ -7,6 +7,7 @@ import com.observeit.observedapp.order.OrderFixtures.aCreateOrderResponse
 import com.observeit.observedapp.order.api.CreateOrderRequest
 import com.observeit.observedapp.order.api.OrderApiFixture
 import com.observeit.observedapp.order.assertOrderCreatedLog
+import com.observeit.observedapp.order.assertOrderCreatedSpan
 import com.observeit.observedapp.order.assertOrdersCreatedIncremented
 import com.observeit.observedapp.test.LogCapture
 import com.observeit.observedapp.test.shouldBeValidationError
@@ -43,6 +44,10 @@ class CreateOrderIntegrationTest : IntegrationTest() {
             checkoutScenario = "happy-path",
         )
         metricCapture.assertOrdersCreatedIncremented()
+        spanCapture.assertOrderCreatedSpan(
+            orderId = response.orderId,
+            checkoutScenario = "happy-path",
+        )
     }
 
     @ParameterizedTest(name = "{0}")
