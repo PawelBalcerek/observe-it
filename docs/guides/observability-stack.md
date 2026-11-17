@@ -142,29 +142,17 @@ environment variables.
 
 ### In Observe-It
 
-Observe-It configures the Paketo OpenTelemetry buildpack in its convention plugin at
-[`build-logic/conventions/src/main/kotlin/conventions/spring.gradle.kts`](https://github.com/PawelBalcerek/observe-it/blob/main/build-logic/conventions/src/main/kotlin/conventions/spring.gradle.kts):
+Observe-It configures the Paketo OpenTelemetry buildpack in its OpenTelemetry convention plugin at
+[`build-logic/conventions/src/main/kotlin/conventions/opentelemetry.gradle.kts`](https://github.com/PawelBalcerek/observe-it/blob/main/build-logic/conventions/src/main/kotlin/conventions/opentelemetry.gradle.kts)
+(building on the base Paketo Java image configuration in
+[`spring.gradle.kts`](https://github.com/PawelBalcerek/observe-it/blob/main/build-logic/conventions/src/main/kotlin/conventions/spring.gradle.kts)):
 
 ```kotlin
-tasks.named<BootBuildImage>("bootBuildImage") {
-    imageName.set("observe-it/${project.name}:${project.version}")
-    tags.set(
-        listOf(
-            "ghcr.io/pawelbalcerek/observe-it/${project.name}:${project.version}"
-        )
-    )
-    buildpacks.set(
-        listOf(
-            "urn:cnb:builder:paketo-buildpacks/java",
-            "docker.io/paketobuildpacks/opentelemetry:${libs.versions.paketo.opentelemetry.get()}"
-        )
-    )
-    environment.putAll(
-        mapOf(
-            "BP_JVM_VERSION" to "25",
-            "BP_OPENTELEMETRY_ENABLED" to "true"
-        )
-    )
+pluginManager.withPlugin("org.springframework.boot") {
+    tasks.named<BootBuildImage>("bootBuildImage") {
+        buildpacks.add("docker.io/paketobuildpacks/opentelemetry:${libs.versions.paketo.opentelemetry.get()}")
+        environment.put("BP_OPENTELEMETRY_ENABLED", "true")
+    }
 }
 ```
 

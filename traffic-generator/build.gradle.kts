@@ -1,5 +1,6 @@
 plugins {
     id("conventions.spring")
+    id("conventions.opentelemetry")
 }
 
 springBoot {

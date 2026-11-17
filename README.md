@@ -95,8 +95,9 @@ Focus on these key files and components to understand how OpenTelemetry, MDC cor
   `metrics-ingest-pipeline.json` (`observe-it-metrics-pipeline`), `metrics-index-template.json` (`ss4o_metrics-*`),
   `traces-ingest-pipeline.json` (`observe-it-traces-pipeline`), `traces-index-template.json` (`ss4o_traces-*`), and
   `saved-objects.ndjson`.
-- [`build-logic/conventions/src/main/kotlin/conventions/spring.gradle.kts`](build-logic/conventions/src/main/kotlin/conventions/spring.gradle.kts)
-  — Spring Boot convention plugin configuring the Paketo OpenTelemetry buildpack to bake the Java Agent into images.
+- [`build-logic/conventions/src/main/kotlin/conventions/opentelemetry.gradle.kts`](build-logic/conventions/src/main/kotlin/conventions/opentelemetry.gradle.kts)
+  — OpenTelemetry convention plugin configuring the Paketo OpenTelemetry buildpack, OpenTelemetry API/testing
+  dependencies, and runtime classpath boundary verification.
 - [`CorrelationContext`](observed-app/src/main/kotlin/com/observeit/observedapp/correlation/CorrelationContext.kt) &
   [`MdcCorrelationFilter`](observed-app/src/main/kotlin/com/observeit/observedapp/correlation/api/MdcCorrelationFilter.kt)
   — Ingress HTTP filter establishing scoped MDC and active span correlation (`checkout.scenario`, `order.id`,

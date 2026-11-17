@@ -30,6 +30,21 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
+tasks.named("check") {
+    dependsOn(
+        provider {
+            sourceSets.map { "detekt${it.name.replaceFirstChar(Char::uppercase)}" }
+        }
+    )
+}
+
+dependencies {
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.kotest.assertions.core)
+    testImplementation(libs.awaitility.kotlin)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.layout.projectDirectory.file("config/detekt/detekt.yml"))

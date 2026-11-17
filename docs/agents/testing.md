@@ -45,7 +45,7 @@ Each service module configures three test source sets via `conventions.spring`:
     `:traffic-generator`) that treats the running Docker Compose stack as a black box via HTTP (`HttpClient`) and
     Docker CLI (`ProcessBuilder`).
   - Default `:e2e:test` is disabled so `./gradlew check` stays fast and Docker-free while still running Ktlint, Detekt,
-    and the build-time `verifyOtelApiBoundary` runtime classpath check across Spring service modules.
+    and the build-time `verifyOtelApiBoundary` runtime classpath check contributed by `conventions.opentelemetry`.
   - Executed against the live topology via `./gradlew :e2e:e2eTest` (or `make verify`), using `E2eSuiteHarness` for
     one-time readiness polling and 7-scenario triggering and Awaitility (`await atMost ... untilAsserted`) with
     OpenSearch index refreshes (`/_refresh`).
