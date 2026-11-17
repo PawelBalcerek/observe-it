@@ -5,18 +5,10 @@ plugins {
 dependencies {
     testImplementation(platform(libs.jackson.bom))
     testImplementation(libs.jackson.module.kotlin)
-    testImplementation(libs.junit.jupiter)
-    testImplementation(libs.kotest.assertions.core)
-    testImplementation(libs.awaitility.kotlin)
-    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 tasks.named<Test>("test") {
     enabled = false
-}
-
-tasks.named("check") {
-    dependsOn("detektTest")
 }
 
 tasks.register<Test>("e2eTest") {
