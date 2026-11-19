@@ -29,3 +29,7 @@ Run all checks on the diff during review:
   uses the latest compatible stable release (`docs/agents/architecture.md` §6).
 - **Suppressions**: list every `@Suppress` the diff adds and judge whether the code should change instead
   (`docs/agents/architecture.md` §5).
+- **Test signal**: for every new test or `Fake*` fixture in the diff, verify it tests application behavior rather than
+  framework annotations, raw storage internals, or single-line SDK wrappers, keeps fakes free of spy/callback hooks, and
+  avoids replaying domain state transitions in persistence adapter tests—even when a ticket's acceptance criteria
+  suggest otherwise (`docs/agents/testing.md` §1, §2).
