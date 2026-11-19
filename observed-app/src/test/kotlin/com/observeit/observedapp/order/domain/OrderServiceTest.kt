@@ -2,6 +2,7 @@ package com.observeit.observedapp.order.domain
 
 import ch.qos.logback.classic.Level.DEBUG
 import com.observeit.observedapp.correlation.CorrelationContext
+import com.observeit.observedapp.order.FakeOrderRepository
 import com.observeit.observedapp.order.FakePaymentGateway
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.OrderFixtures.anOrderLineItem
@@ -48,7 +49,6 @@ import com.observeit.observedapp.order.domain.PaymentMethod.DECLINED_CARD
 import com.observeit.observedapp.order.domain.PaymentMethod.TIMEOUT_GATEWAY
 import com.observeit.observedapp.order.domain.PaymentOutcome.DECLINED
 import com.observeit.observedapp.order.domain.ShippingMethod.STANDARD
-import com.observeit.observedapp.order.infrastructure.InMemoryOrderRepository
 import com.observeit.observedapp.order.infrastructure.OtelOrderMetrics
 import com.observeit.observedapp.order.infrastructure.OtelOrderTracer
 import com.observeit.observedapp.test.LogCapture
@@ -83,7 +83,7 @@ class OrderServiceTest {
     @RegisterExtension
     val spanCapture = SpanCapture()
 
-    private val repository = InMemoryOrderRepository()
+    private val repository = FakeOrderRepository()
     private val paymentGateway = FakePaymentGateway()
     private val orderMetrics = OtelOrderMetrics(metricCapture.openTelemetry, repository)
     private val orderTracer = OtelOrderTracer(spanCapture.openTelemetry)

@@ -4,6 +4,13 @@ spring:
   threads:
     virtual:
       enabled: true
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017/observed_app}
+  data:
+    mongodb:
+      auto-index-creation: true
+      representation:
+        big-decimal: decimal128
 
 server:
   port: 8080
