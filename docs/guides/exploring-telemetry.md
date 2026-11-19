@@ -372,7 +372,7 @@ A structured metric investigation workflow relies on two views:
 ### In Observe-It
 
 OpenSearch bootstrap provisions the `ss4o_metrics-*` **SS4O Metrics Index** pattern, two metric saved searches in
-**Discover**, nine visualizations, and the `Observe-It Metrics Overview` dashboard from
+**Discover**, ten visualizations, and the `Observe-It Metrics Overview` dashboard from
 [`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson):
 
 | Saved Search           | DQL / Query Filter                | Selected Table Columns                                                                                                                                                                   | Primary Operational Purpose                                |
@@ -380,15 +380,16 @@ OpenSearch bootstrap provisions the `ss4o_metrics-*` **SS4O Metrics Index** patt
 | `All Metrics`          | *(none / match all)*              | `@timestamp`, `service`, `name`, `kind`, `value`, `sum`, `count`, `unit`                                                                                                                 | Browse all runtime and domain metrics across both services |
 | `Domain Order Metrics` | `name: orders.* or name: order.*` | `@timestamp`, `service`, `name`, `kind`, `value`, `sum`, `count`, `max`, `attributes.order.state`, `attributes.error.type`, `attributes.inventory.outcome`, `attributes.payment.outcome` | Inspect **Order** counters, histograms, and gauges         |
 
-Open **Dashboards** at `http://localhost:5601` and select `Observe-It Metrics Overview` to view all nine panels
-side by side:
+Open **Dashboards** at `http://localhost:5601` and select `Observe-It Metrics Overview` to view all ten panels side by
+side:
 
 - **Traffic Generator panels**: `Traffic Scenarios by Outcome`, `Traffic Scenario Duration (ms)`, and workload gauges in
   `Runtime Gauges KPI` (`traffic.target_rate`, `traffic.workers.active`).
 - **Observed App domain panels**: `Order State Transitions`, `Order Errors by Type`, `Order Payment Latency (ms)`, and
   `Inventory Reservations by Outcome`.
-- **Runtime & HTTP panels**: `HTTP Server Requests & Latency`, `JVM Memory Used by Service`, and `order.repository.size`
-  in `Runtime Gauges KPI`.
+- **Runtime, HTTP & Database panels**: `HTTP Server Requests & Latency`, `MongoDB Operation Duration (s)`
+  (`db.client.operation.duration` split by `attributes.db.operation.name`), `JVM Memory Used by Service`, and
+  `order.repository.size` in `Runtime Gauges KPI`.
 
 To query `ss4o_metrics-*` directly in **Discover**, switch the index pattern to `ss4o_metrics-*` and apply DQL filters:
 
@@ -401,6 +402,9 @@ name: "order.payment.duration" and attributes.payment.outcome: "TIMEOUT"
 
 # Compare scenario execution counts by Checkout Scenario
 name: "traffic.scenarios.executed" and attributes.checkout.scenario: "PAYMENT_GATEWAY_TIMEOUT"
+
+# Inspect MongoDB client operation duration histograms by operation
+name: "db.client.operation.duration" and attributes.db.system.name: "mongodb"
 
 # Inspect JVM heap usage across services
 name: "jvm.memory.used" and attributes.jvm.memory.type: "heap"
@@ -429,45 +433,50 @@ three-signal investigation follows a top-down pivot:
 
 ### In Observe-It
 
-OpenSearch bootstrap provisions the `ss4o_traces-*` **SS4O Traces Index** pattern, four trace saved searches in
-**Discover**, seven visualizations, and the `Observe-It Traces Overview` dashboard from
+OpenSearch bootstrap provisions the `ss4o_traces-*` **SS4O Traces Index** pattern, five trace saved searches in
+**Discover**, eight visualizations, and the `Observe-It Traces Overview` dashboard from
 [`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson):
 
-| Saved Search               | DQL / Query Filter                                 | Selected Table Columns                                                                                                            | Primary Operational Purpose                                                    |
-| :------------------------- | :------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------- |
-| `All Trace Spans`          | *(none / match all)*                               | `@timestamp`, `service`, `name`, `kind`, `durationMs`, `status.code`, `traceId`, `spanId`, `parentSpanId`                         | Browse all HTTP and domain spans across both services                          |
-| `Checkout Scenario Traces` | `name: "checkout.scenario"`                        | `@timestamp`, `service`, `attributes.checkout.scenario`, `attributes.order.id`, `attributes.order.state`, `durationMs`, `traceId` | Find root **Checkout Scenario** spans and copy `traceId` for waterfall queries |
-| `Domain Order Spans`       | `name: order.* or name: payment.process`           | `@timestamp`, `service`, `name`, `kind`, `durationMs`, `attributes.order.id`, `attributes.order.state`, `traceId`                 | Inspect **Observed App** domain span latencies and **Order** attributes        |
-| `Error & Timeout Spans`    | `status.code: "ERROR" or attributes.error.type: *` | `@timestamp`, `service`, `name`, `status.code`, `attributes.error.type`, `attributes.order.id`, `durationMs`, `traceId`           | Separate `504` `ERROR` spans from `4xx` domain rejections (`error.type`)       |
+| Saved Search               | DQL / Query Filter                                 | Selected Table Columns                                                                                                                                              | Primary Operational Purpose                                                    |
+| :------------------------- | :------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------- |
+| `All Trace Spans`          | *(none / match all)*                               | `@timestamp`, `service`, `name`, `kind`, `durationMs`, `status.code`, `traceId`, `spanId`, `parentSpanId`                                                           | Browse all HTTP, domain, and database spans across both services               |
+| `Checkout Scenario Traces` | `name: "checkout.scenario"`                        | `@timestamp`, `service`, `attributes.checkout.scenario`, `attributes.order.id`, `attributes.order.state`, `durationMs`, `traceId`                                   | Find root **Checkout Scenario** spans and copy `traceId` for waterfall queries |
+| `Domain Order Spans`       | `name: order.* or name: payment.process`           | `@timestamp`, `service`, `name`, `kind`, `durationMs`, `attributes.order.id`, `attributes.order.state`, `traceId`                                                   | Inspect **Observed App** domain span latencies and **Order** attributes        |
+| `Error & Timeout Spans`    | `status.code: "ERROR" or attributes.error.type: *` | `@timestamp`, `service`, `name`, `status.code`, `attributes.error.type`, `attributes.order.id`, `durationMs`, `traceId`                                             | Separate `504` `ERROR` spans from `4xx` domain rejections (`error.type`)       |
+| `MongoDB Client Spans`     | `attributes.db.system.name: "mongodb"`             | `@timestamp`, `name`, `attributes.db.operation.name`, `attributes.db.collection.name`, `attributes.db.query.text`, `durationMs`, `status.code`, `traceId`, `spanId` | Inspect MongoDB `find orders` and `update orders` `CLIENT` spans and queries   |
 
-Open **Dashboards** at `http://localhost:5601` and select `Observe-It Traces Overview` to inspect all seven panels:
+Open **Dashboards** at `http://localhost:5601` and select `Observe-It Traces Overview` to inspect all eight panels:
 
 - **Summary & breakdown panels**: `Trace Spans KPI` and `Spans by Service & Kind` (`INTERNAL`, `CLIENT`, `SERVER`).
 - **Latency panels**: `Scenario Trace Duration (ms)`, `Domain Span Latency by Operation (ms)`,
-  `HTTP Server Span Latency by Route (ms)`, and `Top Operations Latency Table`.
+  `HTTP Server Span Latency by Route (ms)`, `MongoDB Client Span Latency by Operation (ms)`, and
+  `Top Operations Latency Table`.
 - **Error panel**: `Error Spans by Operation` highlighting `504` timeouts and failing operations.
 
-To reconstruct a **Checkout Scenario** trace waterfall, inspect span events and `504` exception stack traces, and pivot
-across all three SS4O indices in **Discover**, switch between `ss4o_traces-*`, `ss4o_logs-*`, and `ss4o_metrics-*` with
-these DQL queries:
+To reconstruct a **Checkout Scenario** trace waterfall (including MongoDB `CLIENT` spans), inspect span events and
+`504` exception stack traces, and pivot across all three SS4O indices in **Discover**, switch between `ss4o_traces-*`,
+`ss4o_logs-*`, and `ss4o_metrics-*` with these DQL queries:
 
 ```text
 # 1. Reconstruct a complete Checkout Scenario waterfall (in ss4o_traces-*, sort @timestamp asc)
 #    Inspect traceId, spanId, parentSpanId, service, name, kind, and durationMs
 traceId: "324939028ee10e41de54d46e0c7e47d2"
 
-# 2. Inspect inventory.reservation and order.state.transitioned span events (in ss4o_traces-*)
+# 2. Inspect MongoDB CLIENT spans and sanitized BSON commands (in ss4o_traces-*)
+attributes.db.system.name: "mongodb" and attributes.db.collection.name: "orders"
+
+# 3. Inspect inventory.reservation and order.state.transitioned span events (in ss4o_traces-*)
 events.name: "inventory.reservation" or events.name: "order.state.transitioned"
 
-# 3. Inspect 504 PaymentGatewayTimeoutException spans and exception stack traces (in ss4o_traces-*)
+# 4. Inspect 504 PaymentGatewayTimeoutException spans and exception stack traces (in ss4o_traces-*)
 status.code: "ERROR" and events.name: "exception"
 
-# 4. Pivot from trace to all correlated logs across both services (switch index pattern to ss4o_logs-*)
+# 5. Pivot from trace to all correlated logs across both services (switch index pattern to ss4o_logs-*)
 traceId: "324939028ee10e41de54d46e0c7e47d2"
 
-# 5. Pivot by Order ID across traces and logs (in ss4o_traces-* or ss4o_logs-*)
+# 6. Pivot by Order ID across traces and logs (in ss4o_traces-* or ss4o_logs-*)
 attributes.order.id: "2bf1b496-13da-4d08-9169-602d3c58b956"
 
-# 6. Pivot to Order metrics for the same Checkout Scenario (switch index pattern to ss4o_metrics-*)
+# 7. Pivot to Order metrics for the same Checkout Scenario (switch index pattern to ss4o_metrics-*)
 attributes.checkout.scenario: "PAYMENT_GATEWAY_TIMEOUT" and (name: order.* or name: traffic.*)
 ```

@@ -108,6 +108,14 @@ export default defineConfig({
               text: '0009: SS4O Traces Normalization & Dashboards',
               link: '/adr/0009-ss4o-traces-ingest-normalization-and-dashboards-exploration',
             },
+            {
+              text: '0010: MongoDB Order Persistence & TTL Retention',
+              link: '/adr/0010-mongodb-order-persistence-and-ttl-retention',
+            },
+            {
+              text: '0011: OTel MongoDB Telemetry & Noise Suppression',
+              link: '/adr/0011-otel-mongodb-client-telemetry-and-span-suppression',
+            },
           ],
         },
       ],

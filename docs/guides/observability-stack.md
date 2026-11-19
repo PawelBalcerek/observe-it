@@ -35,20 +35,22 @@ network batches, manages retry queues with exponential backoff, and routes norma
 
 ### In Observe-It
 
-Observe-It implements this decoupled pipeline locally using five continuous runtime containers and one transient
+Observe-It implements this decoupled pipeline locally using six continuous runtime containers and one transient
 bootstrap container declared in
 [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml):
 
-- `opensearch`: Distributed search and analytics datastore holding the **SS4O Log Index** and **SS4O Metrics Index**
-  (`:9200`).
-- `opensearch-dashboards`: Browser-based interface for log and metric exploration, dashboard visualization, and DQL
-  query execution (`:5601`).
+- `opensearch`: Distributed search and analytics datastore holding the **SS4O Log Index**, **SS4O Metrics Index**, and
+  **SS4O Traces Index** (`:9200`).
+- `opensearch-dashboards`: Browser-based interface for log, metric, and trace exploration, dashboard visualization, and
+  DQL query execution (`:5601`).
 - `opensearch-bootstrap`: Transient initialization container that installs the OpenSearch ingest pipelines, index
   templates, and pre-built saved searches and dashboards before exiting cleanly.
 - `otel-collector`: OpenTelemetry Collector Contrib container receiving OTLP over gRPC (`:4317`) and HTTP (`:4318`),
-  protecting memory limits, batching records, and exporting to OpenSearch.
-- `observed-app`: Kotlin/Spring Boot backend service (`:8080`) handling customer **Order** processing with zero-code
-  instrumentation.
+  protecting memory limits, filtering health-probe noise, batching records, and exporting to OpenSearch.
+- `mongodb`: Single-node MongoDB `8.0.38` datastore (`:27017`) persisting **Order** aggregates with 1-hour TTL retention
+  and a 0.25 GB WiredTiger cache (`mem_limit: 512m`).
+- `observed-app`: Kotlin/Spring Boot backend service (`:8080`) handling customer **Order** processing against MongoDB
+  with zero-code instrumentation.
 - `traffic-generator`: Kotlin/Spring Boot companion service (`:8081`) continuously driving synthetic customer
   **Checkout Scenario** paths against the **Observed App**.
 
@@ -84,41 +86,44 @@ flowchart TD
   OS -->|"service_healthy"| OSB["opensearch-bootstrap (one-shot)"]
   OSD -->|"service_started"| OSB
   OSB -->|"service_completed_successfully"| OC["otel-collector (:4317, :4318)"]
-  OC -->|"service_started"| OA["observed-app (:8080)"]
+  MDB["mongodb (:27017)"] -->|"service_healthy"| OA["observed-app (:8080)"]
+  OC -->|"service_started"| OA
   OC -->|"service_started"| TG["traffic-generator (:8081)"]
   OA -->|"service_healthy"| TG
 ```
 
 The orchestration proceeds through five sequential stages:
 
-1. **Storage initialization**: `opensearch` boots first. Its container healthcheck polls the cluster health endpoint
-   (`http://localhost:9200/_cluster/health`) until the cluster health reaches `green` or `yellow`.
+1. **Storage initialization**: `opensearch` and `mongodb` boot in parallel. `opensearch` polls its cluster health
+   endpoint (`http://localhost:9200/_cluster/health`) until `green` or `yellow`, while `mongodb` runs
+   `mongosh --quiet --eval "db.adminCommand('ping').ok"` until ready.
 2. **Dashboard and bootstrap launch**: Once `opensearch` reports `service_healthy`, `opensearch-dashboards` begins
    booting. Concurrently, `opensearch-bootstrap` executes its initialization script.
-3. **Template, pipeline & saved object configuration**: `opensearch-bootstrap` applies the ingest pipeline and index
-   template to `opensearch`, waits for `opensearch-dashboards` to become responsive, imports pre-configured saved
-   searches, and terminates with exit code 0 (`restart: "no"`).
+3. **Template, pipeline & saved object configuration**: `opensearch-bootstrap` applies the ingest pipelines and index
+   templates to `opensearch`, waits for `opensearch-dashboards` to become responsive, imports the pre-configured saved
+   objects, and terminates with exit code 0 (`restart: "no"`).
 4. **Collector activation**: `otel-collector` starts only when `opensearch-bootstrap` completes with
-   `condition: service_completed_successfully`. This guarantees that the target index template and ingest pipeline are
-   in place before the collector can forward any logs.
-5. **Application & traffic launch**: `observed-app` starts as soon as `otel-collector` is listening. Finally,
-   `traffic-generator` waits for `observed-app` to achieve `service_healthy` readiness before dispatching synthetic
-   **Checkout Scenario** workloads.
+   `condition: service_completed_successfully`. This guarantees that the target index templates and ingest pipelines are
+   in place before the collector can forward any telemetry.
+5. **Application & traffic launch**: `observed-app` starts once `otel-collector` is listening and `mongodb` reports
+   `service_healthy`. Finally, `traffic-generator` waits for `observed-app` to achieve `service_healthy` readiness
+   before dispatching synthetic **Checkout Scenario** workloads.
 
-The entire local sandbox operates within a bounded memory footprint totaling ~2.75 GB of RAM:
+The entire local sandbox operates within a bounded memory footprint totaling ~3.25 GB of RAM (~3 GB target):
 
-| Service                 | Container Name          | Host Port        | Memory Limit | Startup Condition / Role                                      |
-| :---------------------- | :---------------------- | :--------------- | :----------- | :------------------------------------------------------------ |
-| `opensearch`            | `opensearch`            | `:9200`          | `1g`         | Root storage; healthcheck polls cluster green/yellow health   |
-| `opensearch-dashboards` | `opensearch-dashboards` | `:5601`          | `512m`       | Visual UI; waits for `opensearch` `service_healthy`           |
-| `opensearch-bootstrap`  | `opensearch-bootstrap`  | None             | None         | One-shot init; waits for `opensearch` & Dashboards            |
-| `otel-collector`        | `otel-collector`        | `:4317`, `:4318` | `256m`       | Telemetry pipeline; waits for bootstrap successful completion |
-| `observed-app`          | `observed-app`          | `:8080`          | `512m`       | Backend order service; waits for `otel-collector`             |
-| `traffic-generator`     | `traffic-generator`     | `:8081`          | `512m`       | Workload runner; waits for `observed-app` `service_healthy`   |
+| Service                 | Container Name          | Host Port        | Memory Limit | Startup Condition / Role                                                   |
+| :---------------------- | :---------------------- | :--------------- | :----------- | :------------------------------------------------------------------------- |
+| `opensearch`            | `opensearch`            | `:9200`          | `1g`         | Root telemetry store; healthcheck polls cluster green/yellow health        |
+| `opensearch-dashboards` | `opensearch-dashboards` | `:5601`          | `512m`       | Visual UI; waits for `opensearch` `service_healthy`                        |
+| `opensearch-bootstrap`  | `opensearch-bootstrap`  | None             | None         | One-shot init; waits for `opensearch` & Dashboards                         |
+| `otel-collector`        | `otel-collector`        | `:4317`, `:4318` | `256m`       | Telemetry pipeline; waits for bootstrap successful completion              |
+| `mongodb`               | `mongodb`               | `:27017`         | `512m`       | Order datastore (`mongo:8.0.38`, `0.25 GB` WiredTiger cache); `ping` probe |
+| `observed-app`          | `observed-app`          | `:8080`          | `512m`       | Backend order service; waits for `otel-collector` & `mongodb` healthy      |
+| `traffic-generator`     | `traffic-generator`     | `:8081`          | `512m`       | Workload runner; waits for `observed-app` `service_healthy`                |
 
-For detailed architectural rationale on out-of-process workload generation and memory containment, see
+For detailed architectural rationale on out-of-process workload generation, MongoDB sizing, and TTL retention, see
 [ADR-0004: Out-of-Process Traffic Generator Service](../adr/0004-out-of-process-traffic-generator.md) and
-[ADR-0005: Bounded Lock-Free In-Memory Order Repository](../adr/0005-bounded-in-memory-order-repository.md).
+[ADR-0010: MongoDB Order Persistence, TTL Retention, and Testcontainers Integration Testing](../adr/0010-mongodb-order-persistence-and-ttl-retention.md).
 
 ## Zero-Code OpenTelemetry Java Agent via Cloud Native Buildpacks
 
@@ -168,10 +173,13 @@ variables:
 
 ```yaml
 environment:
+  - SPRING_MONGODB_URI=mongodb://mongodb:27017/observe_it
   - BPL_JVM_THREAD_COUNT=50
   - OTEL_JAVAAGENT_ENABLED=true
   - OTEL_SERVICE_NAME=observed-app
-  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.3.0},deployment.environment.name=local
+  - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.4.0},deployment.environment.name=local
+  - OTEL_SEMCONV_STABILITY_OPT_IN=database
+  - OTEL_INSTRUMENTATION_SPRING_DATA_ENABLED=false
   - OTEL_LOGS_EXPORTER=otlp
   - OTEL_TRACES_EXPORTER=otlp
   - OTEL_BSP_SCHEDULE_DELAY=1000
@@ -208,10 +216,10 @@ see [ADR-0001: Zero-Code OpenTelemetry Java Agent and Logback OTLP Bridge](../ad
 and
 [ADR-0006: OpenTelemetry API Domain Metrics Port Boundary and In-Memory Testing](../adr/0006-otel-api-domain-metrics-port-and-in-memory-testing.md).
 
-## OpenTelemetry Collector Pipeline (otlp → memory_limiter → batch → opensearch)
+## OpenTelemetry Collector Pipeline (otlp → memory_limiter → filter → batch → opensearch)
 
 The OpenTelemetry Collector routes telemetry through modular pipelines composed of three distinct component stages:
-**Receivers** (how telemetry enters the collector), **Processors** (how telemetry is buffered, validated, and
+**Receivers** (how telemetry enters the collector), **Processors** (how telemetry is buffered, filtered, validated, and
 transformed), and **Exporters** (how telemetry is translated and delivered to downstream destinations).
 
 In production systems, collectors must be hardened against high-throughput bursts that could trigger Out-Of-Memory
@@ -219,7 +227,11 @@ In production systems, collectors must be hardened against high-throughput burst
 heap consumption at fixed intervals. When usage crosses a configured threshold, the processor drops incoming data or
 returns retryable backpressure to clients until memory returns to safe levels.
 
-Downstream backends benefit significantly from request batching. Emitting each log record individually over HTTP/REST
+A `filter` processor placed between `memory_limiter` and `batch` drops low-value operational noise—such as periodic
+liveness probes (`/health`) and database driver heartbeat or topology-discovery commands—before batching and storage,
+keeping dashboards focused on user-facing requests without disabling genuine container health checks.
+
+Downstream backends benefit significantly from request batching. Emitting each record individually over HTTP/REST
 imposes severe network overhead and index contention. The `batch` processor aggregates records into configured batch
 sizes or time intervals, maximizing throughput and index compression. Furthermore, exporters must include retry
 buffers (`sending_queue` and `retry_on_failure`) to withstand transient backend unavailability without dropping
@@ -229,6 +241,8 @@ telemetry.
 
 - [OpenTelemetry Collector memory_limiter Processor Best Practices](https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/memorylimiterprocessor/README.md)
   — Guidelines for configuring `check_interval`, `limit_mib`, and `spike_limit_mib`.
+- [OpenTelemetry Collector Filter Processor (filterprocessor)](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor)
+  — Dropping spans and metric datapoints using OTTL conditions before export.
 - [OpenSearch Exporter for OpenTelemetry Collector (opensearchexporter)](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/opensearchexporter)
   — Exporter configuration for data stream indexing, OpenSearch schema mapping, and HTTP retry options.
 
@@ -238,37 +252,30 @@ Observe-It configures its collector pipeline in
 [`docker/otel-collector/config.yaml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/otel-collector/config.yaml):
 
 ```yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
-      http:
-        endpoint: 0.0.0.0:4318
-
 processors:
   memory_limiter:
     check_interval: 1s
     limit_mib: 200
     spike_limit_mib: 50
+  filter/traces:
+    error_mode: ignore
+    trace_conditions:
+      - span.attributes["http.route"] == "/actuator/health"
+      - span.attributes["url.path"] == "/actuator/health"
+      - span.attributes["db.operation.name"] == "hello"
+      - span.attributes["db.operation.name"] == "isMaster"
+      - span.attributes["db.operation.name"] == "listDatabases"
+  filter/metrics:
+    error_mode: ignore
+    metric_conditions:
+      - datapoint.attributes["http.route"] == "/actuator/health"
+      - datapoint.attributes["url.path"] == "/actuator/health"
+      - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "hello"
+      - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "isMaster"
+      - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "listDatabases"
   batch:
     send_batch_size: 100
     timeout: 1s
-
-exporters:
-  opensearch:
-    http:
-      endpoint: "http://opensearch:9200"
-      tls:
-        insecure: true
-    mapping:
-      mode: ss4o
-    dataset: observe-it
-    namespace: local
-    sending_queue:
-      enabled: true
-    retry_on_failure:
-      enabled: true
 
 service:
   pipelines:
@@ -278,11 +285,11 @@ service:
       exporters: [opensearch]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, filter/metrics, batch]
       exporters: [opensearch]
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, filter/traces, batch]
       exporters: [opensearch]
 ```
 
@@ -292,6 +299,9 @@ The pipeline operates with specific safeguards:
   application Java Agents and exposes HTTP (`:4318`) for standard web hooks.
 - **Memory protection**: `limit_mib: 200` and `spike_limit_mib: 50` ensure the collector process never breaches its
   256 MB Docker container memory limit (`mem_limit: 256m`).
+- **Health-probe noise filtering**: `filter/traces` and `filter/metrics` drop `/actuator/health` HTTP probes and
+  MongoDB `hello`, `isMaster`, and `listDatabases` admin commands before batching (see
+  [ADR-0011](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md)).
 - **Batching efficiency**: Aggregates records into chunks of 100 entries or flushes every 1 second, reducing HTTP
   connection overhead against OpenSearch.
 - **SS4O mapping & retries**: Uses `mapping.mode: ss4o` with dataset `observe-it` and namespace `local`, routing log
@@ -356,19 +366,24 @@ Observe-It coordinates storage provisioning through configuration files in
    and
    [`metrics-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/metrics-index-template.json)):
    Registers `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics` (`ss4o_metrics-*`, priority 200) to promote
-   `service`, `version`, and `env`, unify `value@int` / `value@double` into `value`, and map `value@int` as 64-bit
-   `long` (see [ADR-0007](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md)).
+   `service`, `version`, and `env`, unify `value@int` / `value@double` into `value`, map `value@int` as 64-bit `long`,
+   and map stable `attributes.db.*` and `attributes.network.peer.*` fields (see
+   [ADR-0007](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md) and
+   [ADR-0011](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md)).
 5. **Traces ingest pipeline & index template**
    ([`traces-ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-ingest-pipeline.json)
    and
    [`traces-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-index-template.json)):
    Registers `observe-it-traces-pipeline` and `observe-it-ss4o-traces` (`ss4o_traces-*`, priority 200) to set
    `@timestamp` from `startTime`, compute `durationInNanos` and `durationMs`, promote `service`, `serviceName`,
-   `version`, and `env`, and map `events.attributes.exception.*` (see
-   [ADR-0009](../adr/0009-ss4o-traces-ingest-normalization-and-dashboards-exploration.md)).
+   `version`, and `env`, map `events.attributes.exception.*`, and map stable `attributes.db.*` fields including
+   `attributes.db.query.text` with `ignore_above: 8192` (see
+   [ADR-0009](../adr/0009-ss4o-traces-ingest-normalization-and-dashboards-exploration.md) and
+   [ADR-0011](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md)).
 6. **Pre-configured dashboards & saved searches** ([`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson)):
-   Imports `ss4o_logs-*`, `ss4o_metrics-*`, and `ss4o_traces-*` index patterns, four log saved searches, two metric
-   saved searches, four trace saved searches, sixteen visualizations, and the `Observe-It Metrics Overview` and
+   Imports 34 saved objects: `ss4o_logs-*`, `ss4o_metrics-*`, and `ss4o_traces-*` index patterns, four log saved
+   searches, two metric saved searches, five trace saved searches (including `MongoDB Client Spans`), eighteen
+   visualizations (including MongoDB latency and duration charts), and the `Observe-It Metrics Overview` and
    `Observe-It Traces Overview` dashboards.
 
 ## Stack Lifecycle Commands
@@ -384,31 +399,33 @@ The [`Makefile`](https://github.com/PawelBalcerek/observe-it/blob/main/Makefile)
 operations:
 
 - `make up`: Packages OCI container images with the Paketo OpenTelemetry Java Agent (via `./gradlew bootBuildImage`)
-  and starts all six Docker Compose containers in detached mode (`docker compose up -d`).
+  and starts all seven Docker Compose containers in detached mode (`docker compose up -d`).
 - `make logs`: Streams aggregate follow logs across all active containers (`docker compose logs -f`).
 - `make down`: Gracefully stops and removes running containers (`docker compose down`).
 - `make reset`: Tears down running containers and deletes all persistent volumes (`docker compose down -v`), resetting
-  the OpenSearch data volume (`opensearch-data`) to a blank slate.
-- `make verify`: Executes `./gradlew check` (including `verifyOtelApiBoundary`) and the Kotlin `:e2e:e2eTest`
-  verification suite ([`e2e/`](https://github.com/PawelBalcerek/observe-it/tree/main/e2e)) to validate
-  API-only OpenTelemetry runtime classpaths, container health, 7-scenario execution, OpenSearch log, metric, and trace
-  indexing (including distributed parent-child hierarchy), and Dashboards saved objects.
+  the OpenSearch (`opensearch-data`) and MongoDB (`mongodb-data`) volumes to a blank slate.
+- `make verify`: Executes `./gradlew check` (including `verifyOtelApiBoundary` and singleton Testcontainers MongoDB
+  integration tests) and the Kotlin `:e2e:e2eTest` verification suite
+  ([`e2e/`](https://github.com/PawelBalcerek/observe-it/tree/main/e2e)) to validate API-only OpenTelemetry runtime
+  classpaths, container health (including `mongodb`), 7-scenario execution, OpenSearch log, metric, and trace indexing
+  (including MongoDB `CLIENT` spans and `db.client.operation.duration`), noise suppression, and Dashboards saved
+  objects.
 
 #### Dual-Mode Docker Compose Workflow
 
 Docker Compose supports variable parameterization for image coordinates and pull policies:
 
-- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.3.0}`
+- `image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/<service>:${OBSERVE_IT_IMAGE_TAG:-0.4.0}`
 - `pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}`
-- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.3.0},deployment.environment.name=local`
+- `OTEL_RESOURCE_ATTRIBUTES: service.version=${OBSERVE_IT_IMAGE_TAG:-0.4.0},deployment.environment.name=local`
 
 This dual-mode design enables two core development workflows:
 
 1. **Pre-built GHCR images (Zero-build evaluation)**: Running `docker compose up -d` pulls multi-architecture
    (`linux/amd64` and `linux/arm64`) OCI container images from GitHub Container Registry out of the box when no local
    image exists (`pull_policy: missing`).
-2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.3.0`
-   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.3.0` into the local Docker daemon. Subsequent `docker compose up -d`
+2. **Local source builds (`make up` / Gradle)**: Running `./gradlew bootBuildImage` tags both `observe-it/<service>:0.4.0`
+   and `ghcr.io/pawelbalcerek/observe-it/<service>:0.4.0` into the local Docker daemon. Subsequent `docker compose up -d`
    commands use the locally built images without network requests.
 3. **Strict offline / CI verification**: Passing `OBSERVE_IT_PULL_POLICY=never` ensures pull request and branch builds
    strictly verify locally built container images and fail fast if images are missing.
