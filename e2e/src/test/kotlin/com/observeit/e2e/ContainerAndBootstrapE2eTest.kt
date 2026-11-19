@@ -39,6 +39,7 @@ class ContainerAndBootstrapE2eTest {
 
         // when
         val opensearchHealth = docker.containerHealthStatus("opensearch")
+        val mongodbHealth = docker.containerHealthStatus("mongodb")
         val dashboardsState = dashboards.overallStatusState()
         val collectorState = docker.containerStateStatus("otel-collector")
         val observedAppHealth = actuator.healthStatus(E2eConfig.OBSERVED_APP_BASE_URL)
@@ -49,6 +50,7 @@ class ContainerAndBootstrapE2eTest {
         // then
         assertSoftly {
             opensearchHealth shouldBe "healthy"
+            mongodbHealth shouldBe "healthy"
             dashboardsState shouldBe "green"
             collectorState shouldBe "running"
             observedAppHealth shouldBe "UP"

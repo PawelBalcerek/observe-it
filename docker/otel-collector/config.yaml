@@ -11,6 +11,22 @@ processors:
     check_interval: 1s
     limit_mib: 200
     spike_limit_mib: 50
+  filter/traces:
+    error_mode: ignore
+    trace_conditions:
+      - span.attributes["http.route"] == "/actuator/health"
+      - span.attributes["url.path"] == "/actuator/health"
+      - span.attributes["db.operation.name"] == "hello"
+      - span.attributes["db.operation.name"] == "isMaster"
+      - span.attributes["db.operation.name"] == "listDatabases"
+  filter/metrics:
+    error_mode: ignore
+    metric_conditions:
+      - datapoint.attributes["http.route"] == "/actuator/health"
+      - datapoint.attributes["url.path"] == "/actuator/health"
+      - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "hello"
+      - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "isMaster"
+      - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "listDatabases"
   batch:
     send_batch_size: 100
     timeout: 1s
@@ -38,9 +54,9 @@ service:
       exporters: [opensearch]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, filter/metrics, batch]
       exporters: [opensearch]
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, filter/traces, batch]
       exporters: [opensearch]

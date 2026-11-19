@@ -12,7 +12,7 @@ import tools.jackson.module.kotlin.jacksonMapperBuilder
 
 class DashboardsSavedObjectsE2eTest {
     @Test
-    fun `all 31 OpenSearch Dashboards saved objects exist`() {
+    fun `all 34 OpenSearch Dashboards saved objects exist`() {
         // given
         val expectedSavedObjects = listOf(
             "index-pattern:ss4o_logs",
@@ -28,6 +28,7 @@ class DashboardsSavedObjectsE2eTest {
             "search:checkout-scenario-traces",
             "search:domain-order-spans",
             "search:error-and-timeout-spans",
+            "search:mongodb-client-spans",
             "visualization:traffic-scenarios-by-outcome",
             "visualization:traffic-scenario-duration",
             "visualization:order-state-transitions",
@@ -37,6 +38,7 @@ class DashboardsSavedObjectsE2eTest {
             "visualization:http-server-requests-and-latency",
             "visualization:jvm-heap-memory-by-service",
             "visualization:runtime-gauges-kpi",
+            "visualization:mongodb-operation-duration",
             "visualization:trace-spans-kpi",
             "visualization:spans-by-service-and-kind",
             "visualization:scenario-trace-duration",
@@ -44,6 +46,7 @@ class DashboardsSavedObjectsE2eTest {
             "visualization:http-server-span-latency-by-route",
             "visualization:error-spans-by-operation",
             "visualization:top-operations-latency-table",
+            "visualization:mongodb-span-latency-by-operation",
             "dashboard:observe-it-metrics-overview",
             "dashboard:observe-it-traces-overview",
         )
