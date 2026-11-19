@@ -22,6 +22,7 @@ distinguishes the core patterns that matter from supporting scaffolding and link
 ```mermaid
 flowchart LR
   TG["Traffic Generator (:8081)"] -->|"HTTP REST + traceparent + X-Checkout-Scenario"| OA["Observed App (:8080)"]
+  OA -->|"MongoDB Wire Protocol"| MDB["MongoDB (:27017)"]
   TG -.->|"OTLP gRPC (Java Agent)"| OC["OpenTelemetry Collector (:4317)"]
   OA -.->|"OTLP gRPC (Java Agent)"| OC
   OC -->|"SS4O Logs, Metrics & Traces Pipelines"| OS["OpenSearch (:9200)"]
@@ -61,9 +62,11 @@ Once the containers are healthy, open OpenSearch Dashboards at `http://localhost
 1. Navigate to **Discover** to open any of the 4 log saved searches (`ss4o_logs-*`)—**All Order Logs**, **Warnings &
    Business Rejections**, **Gateway Timeouts & Stack Traces**, or **Checkout Scenario Explorer**—switch to
    `ss4o_metrics-*` for **All Metrics** and **Domain Order Metrics**, or switch to `ss4o_traces-*` for **All Trace
-   Spans**, **Checkout Scenario Traces**, **Domain Order Spans**, and **Error & Timeout Spans**.
-2. Navigate to **Dashboards** and open **Observe-It Metrics Overview** or **Observe-It Traces Overview** for live
-   **Order**, **Checkout Scenario**, HTTP, and JVM visualizations.
+   Spans**, **Checkout Scenario Traces**, **Domain Order Spans**, **Error & Timeout Spans**, and **MongoDB Client
+   Spans**.
+2. Navigate to **Dashboards** and open **Observe-It Metrics Overview** (including **MongoDB Operation Duration (s)**) or
+   **Observe-It Traces Overview** (including **MongoDB Client Span Latency by Operation (ms)**) for live **Order**,
+   **Checkout Scenario**, MongoDB, HTTP, and JVM visualizations.
 
 > [!TIP]
 > To interactively trigger specific **Checkout Scenario** paths on demand or control workload rates, follow the
@@ -89,7 +92,8 @@ Focus on these key files and components to understand how OpenTelemetry, MDC cor
 - [`docker-compose.yml`](docker-compose.yml) — Container network topology, health check dependency chain, and
   OpenTelemetry Java Agent environment variable configuration.
 - [`docker/otel-collector/config.yaml`](docker/otel-collector/config.yaml) — OpenTelemetry Collector `logs`, `metrics`,
-  and `traces` pipelines: OTLP gRPC receiver, `memory_limiter` and `batch` processors, and OpenSearch `ss4o` exporter.
+  and `traces` pipelines: OTLP gRPC receiver, `memory_limiter`, `filter/traces` / `filter/metrics`, and `batch`
+  processors, and OpenSearch `ss4o` exporter.
 - [`docker/opensearch/`](docker/opensearch/) — OpenSearch bootstrap artifacts: `bootstrap.sh`,
   `ingest-pipeline.json` (`observe-it-logs-pipeline`), `index-template.json` (`ss4o_logs-*`),
   `metrics-ingest-pipeline.json` (`observe-it-metrics-pipeline`), `metrics-index-template.json` (`ss4o_metrics-*`),
@@ -115,9 +119,11 @@ Focus on these key files and components to understand how OpenTelemetry, MDC cor
 
 These modules support the realistic runtime environment but are secondary to the observability architecture:
 
-- [`observed-app/.../order/`](observed-app/src/main/kotlin/com/observeit/observedapp/order/) — In-memory **Order**
-  domain and REST endpoints modeling the state machine (`CREATED` → `RESERVED` → `PAID` → `SHIPPED` / `FAILED` /
-  `CANCELLED`) solely to emit realistic business telemetry.
+- [`observed-app/.../order/`](observed-app/src/main/kotlin/com/observeit/observedapp/order/) — Hexagonal **Order**
+  domain, REST endpoints, and
+  [`MongoOrderRepository`](observed-app/src/main/kotlin/com/observeit/observedapp/order/infrastructure/MongoOrderRepository.kt)
+  persistence modeling the state machine (`CREATED` → `RESERVED` → `PAID` → `SHIPPED` / `FAILED` / `CANCELLED`) to emit
+  realistic business and database telemetry.
 - [`traffic-generator/`](traffic-generator/) — Synthetic workload generator driving continuous background traffic and
   weighted **Checkout Scenario** paths to populate OpenSearch automatically.
 - `build-logic/`, `config/`, `.agents/`, `docs/agents/`, [`AGENTS.md`](AGENTS.md) — Gradle convention plugins,
@@ -125,13 +131,14 @@ These modules support the realistic runtime environment but are secondary to the
 
 ## Observability Pillars & Roadmap
 
-Observe-It is developed across three sequential milestones, each adding an observability signal to the shared domain:
+Observe-It is developed across four sequential milestones, each adding an observability capability to the shared domain:
 
-| Milestone       | Pillar               | Status   | Scope & Capabilities                                                                                                                                                                                                                                                                                                     |
-| :-------------- | :------------------- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Milestone 1** | Structured Logging   | Complete | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation (`checkout.scenario`, `order.id`, `customer.id`), zero-code OpenTelemetry Java Agent log bridge, OpenTelemetry Collector `ss4o` export, OpenSearch `observe-it-logs-pipeline` normalization, and pre-bootstrapped OpenSearch Dashboards saved searches.      |
-| **Milestone 2** | Metrics & Dashboards | Complete | Auto-instrumented JVM/HTTP metrics, pure `domain` metric ports (`OrderMetrics`, `TrafficMetrics`) over `opentelemetry-api`, 1-second `DELTA` OTLP export, `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics`, `MetricCapture` in-memory tests, and the `Observe-It Metrics Overview` dashboard.                 |
-| **Milestone 3** | Distributed Tracing  | Current  | End-to-end W3C `traceparent` propagation across the **Traffic Generator** and **Observed App**, pure `domain` span ports (`OrderTracer`, `TrafficTracer`), span events and error discipline, `observe-it-traces-pipeline` and `observe-it-ss4o-traces`, `SpanCapture` in-memory tests, and `Observe-It Traces Overview`. |
+| Milestone       | Pillar                               | Status   | Scope & Capabilities                                                                                                                                                                                                                                                                                                        |
+| :-------------- | :----------------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Milestone 1** | Structured Logging                   | Complete | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation (`checkout.scenario`, `order.id`, `customer.id`), zero-code OpenTelemetry Java Agent log bridge, OpenTelemetry Collector `ss4o` export, OpenSearch `observe-it-logs-pipeline` normalization, and pre-bootstrapped OpenSearch Dashboards saved searches.         |
+| **Milestone 2** | Metrics & Dashboards                 | Complete | Auto-instrumented JVM/HTTP metrics, pure `domain` metric ports (`OrderMetrics`, `TrafficMetrics`) over `opentelemetry-api`, 1-second `DELTA` OTLP export, `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics`, `MetricCapture` in-memory tests, and the `Observe-It Metrics Overview` dashboard.                    |
+| **Milestone 3** | Distributed Tracing                  | Complete | End-to-end W3C `traceparent` propagation across the **Traffic Generator** and **Observed App**, pure `domain` span ports (`OrderTracer`, `TrafficTracer`), span events and error discipline, `observe-it-traces-pipeline` and `observe-it-ss4o-traces`, `SpanCapture` in-memory tests, and `Observe-It Traces Overview`.    |
+| **Milestone 4** | Database Observability & Persistence | Current  | Hexagonal `MongoOrderRepository` (`MongoTemplate`, BSON `Decimal128`, 1-hour TTL retention), singleton `@ServiceConnection` `MongoDBContainer` integration tests, `OTEL_SEMCONV_STABILITY_OPT_IN=database`, `InstrumentationUtil.suppressInstrumentation`, Collector health-probe filtering, and MongoDB Dashboards panels. |
 
 ## Documentation & Official Upstream References
 

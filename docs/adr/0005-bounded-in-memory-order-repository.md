@@ -1,6 +1,11 @@
 # 0005. Bounded Lock-Free In-Memory Order Repository
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0010](0010-mongodb-order-persistence-and-ttl-retention.md)
+
+> [!WARNING]
+> This decision has been superseded by
+> [ADR-0010: MongoDB Order Persistence, TTL Retention, and Testcontainers Integration Testing](0010-mongodb-order-persistence-and-ttl-retention.md).
+> It is retained as historical context.
 
 ## Context
 

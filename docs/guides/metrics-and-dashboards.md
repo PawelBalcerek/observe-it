@@ -7,31 +7,35 @@ runtime instrumentation and business telemetry emitted explicitly by domain code
 prevents both redundant manual instrumentation and blind spots in business observability.
 
 A zero-code instrumentation agent attaches bytecode hooks to standard runtime subsystems—garbage collection, heap and
-non-heap memory pools, thread pools, CPU utilization, HTTP server request latencies, and outbound HTTP client calls.
-Because those signals follow standardized semantic conventions, operations teams get golden signals (latency, traffic,
-errors, and saturation) across every service without writing boilerplate timers or gauges.
+non-heap memory pools, thread pools, CPU utilization, HTTP server request latencies, outbound HTTP client calls, and
+database client operations. Because those signals follow standardized semantic conventions, operations teams get golden
+signals (latency, traffic, errors, and saturation) across every service without writing boilerplate timers or gauges.
 
 Runtime instrumentation cannot, however, infer business semantics. An HTTP `200 OK` response does not distinguish a
 completed request from a soft business rejection, nor does an HTTP route reveal which downstream resource was exhausted,
-which external gateway timed out, or how many items sit in an in-memory store. Custom domain metrics fill that gap—and
+which external gateway timed out, or how many entities sit in a domain store. Custom domain metrics fill that gap—and
 isolating them behind a pure domain port (`MetricsPort`) keeps business services free of vendor SDKs while an
 infrastructure adapter translates domain calls into `io.opentelemetry.api.OpenTelemetry` meters.
 
 ### External Sources & Ecosystem Practice
 
 - [OpenTelemetry Java Agent Supported Libraries](https://opentelemetry.io/docs/zero-code/java/agent/supported-libraries/)
-  — Runtime, JVM, and HTTP server/client metrics emitted automatically by the Java Agent.
+  — Runtime, JVM, HTTP, and database client metrics emitted automatically by the Java Agent.
 - [OpenTelemetry Semantic Conventions for HTTP Metrics](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/)
   — Standardized `http.server.request.duration` and `http.client.request.duration` instrument definitions.
+- [OpenTelemetry Semantic Conventions for Database Metrics](https://opentelemetry.io/docs/specs/semconv/database/database-metrics/)
+  — Standardized `db.client.operation.duration` histogram definition and bounded `db.*` attributes.
 - [OpenTelemetry Semantic Conventions for JVM Metrics](https://opentelemetry.io/docs/specs/semconv/runtime/jvm-metrics/)
   — Standardized `jvm.memory.used`, `jvm.gc.duration`, `jvm.thread.count`, and `jvm.cpu.recent_utilization` gauges.
 
 ### In Observe-It
 
 In Observe-It, the Paketo-injected OpenTelemetry Java Agent emits JVM (`jvm.memory.used`, `jvm.gc.duration`,
-`jvm.thread.count`) and HTTP (`http.server.request.duration`, `http.client.request.duration`) metrics automatically when
+`jvm.thread.count`), HTTP (`http.server.request.duration`, `http.client.request.duration`), and MongoDB client
+(`db.client.operation.duration`, enabled via `OTEL_SEMCONV_STABILITY_OPT_IN=database`) metrics automatically when
 `OTEL_METRICS_EXPORTER=otlp` is set in
-[`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml).
+[`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) (see
+[ADR-0011](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md)).
 
 Custom domain metrics are defined behind pure Kotlin interfaces with zero OpenTelemetry imports and implemented by
 infrastructure adapters backed by `io.opentelemetry:opentelemetry-api` (see
@@ -101,7 +105,10 @@ and
 Unbounded identifiers (`order.id`, `customer.id`) are strictly excluded from metric attributes and remain confined to
 structured logs ([Structured Logging in Kotlin & Spring Boot](./structured-logging.md)). Histograms declare explicit
 bucket boundaries (`PAYMENT_DURATION_BUCKETS` from `10.0` to `5000.0` ms in `OtelOrderMetrics`;
-`SCENARIO_DURATION_BUCKETS` from `50.0` to `10000.0` ms in `OtelTrafficMetrics`).
+`SCENARIO_DURATION_BUCKETS` from `50.0` to `10000.0` ms in `OtelTrafficMetrics`). Inside `OtelOrderMetrics`, the
+`order.repository.size` gauge callback wraps `orderRepository.count()` (an O(1) `estimatedCount()` query in
+`MongoOrderRepository`) in `InstrumentationUtil.suppressInstrumentation { ... }` so 1 Hz gauge collection does not emit
+spurious `count` datapoints on `db.client.operation.duration`.
 
 ## Delta Temporality, SS4O Metric Normalization & 64-Bit Field Mappings
 
@@ -140,18 +147,22 @@ Both `observed-app` and `traffic-generator` export `DELTA` metrics every second 
 ```
 
 The OpenTelemetry Collector routes metrics through its `metrics` pipeline (`receivers: [otlp]`,
-`processors: [memory_limiter, batch]`, `exporters: [opensearch]`) to the `ss4o_metrics-observe-it-local` **SS4O
-Metrics Index**. At index time,
+`processors: [memory_limiter, filter/metrics, batch]`, `exporters: [opensearch]`) to the `ss4o_metrics-observe-it-local`
+**SS4O Metrics Index**, dropping `/actuator/health` HTTP datapoints and MongoDB `hello`, `isMaster`, and `listDatabases`
+admin datapoints before indexing. At index time,
 [`docker/opensearch/metrics-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/metrics-index-template.json)
-enforces `value@int: long`, `value: double`, `value@double: double`, `count: long`, `sum/min/max: double`, and
-attaches `observe-it-metrics-pipeline`
+enforces `value@int: long`, `value: double`, `value@double: double`, `count: long`, `sum/min/max: double`, explicit
+`attributes.db.*` and `attributes.network.peer.*` mappings for `db.client.operation.duration`, and attaches
+`observe-it-metrics-pipeline`
 ([`docker/opensearch/metrics-ingest-pipeline.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/metrics-ingest-pipeline.json))
 as the `default_pipeline`. That Painless script promotes `resource['service.name']`, `resource['service.version']`, and
 `resource['deployment.environment.name']` to top-level `service`, `version`, and `env` (with `serviceName` fallback),
 unifies `value@double` / `value@int` into `value`, and strips `attributes.data_stream`.
 
 For full architectural rationale, see
-[ADR-0007: SS4O Metrics Delta Temporality and OpenSearch Schema Normalization](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md).
+[ADR-0007: SS4O Metrics Delta Temporality and OpenSearch Schema Normalization](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md)
+and
+[ADR-0011: OpenTelemetry MongoDB Client Telemetry, Stable Database Semconv, and Noise Suppression](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md).
 
 ## In-Memory Metric Verification in Unit & Integration Tests
 
@@ -192,8 +203,10 @@ backed by `InMemoryMetricReader.createDelta()`.
   ```
 
 - **Integration tests**:
-  [`TestMetricsConfiguration`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/integration/kotlin/com/observeit/observedapp/test/TestMetricsConfiguration.kt)
-  provides a `@Primary` `OpenTelemetry` bean backed by `MetricCapture`, and
+  [`TestOpenTelemetryConfiguration`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/integration/kotlin/com/observeit/observedapp/test/TestOpenTelemetryConfiguration.kt)
+  provides a `@Primary` `OpenTelemetry` bean backed by `MetricCapture` and `SpanCapture`, while
+  [`TestMongoConfiguration`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/integration/kotlin/com/observeit/observedapp/test/TestMongoConfiguration.kt)
+  provisions a singleton `@ServiceConnection` `MongoDBContainer`.
   [`IntegrationTest`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/integration/kotlin/com/observeit/observedapp/IntegrationTest.kt)
-  calls `metricCapture.drainAndReset()` in `@BeforeEach` / `@AfterEach` so cached Spring Boot contexts stay isolated
-  across all seven **Checkout Scenario** integration tests.
+  calls `metricCapture.drainAndReset()`, `spanCapture.reset()`, and clears the `orders` collection in `@BeforeEach` /
+  `@AfterEach` so cached Spring Boot contexts stay isolated across all seven **Checkout Scenario** integration tests.

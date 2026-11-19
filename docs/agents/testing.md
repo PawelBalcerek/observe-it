@@ -6,8 +6,9 @@ Each service module configures three test source sets via `conventions.spring`:
 
 - **Shared Test Fixtures (`src/testFixtures/kotlin`)**:
   - Enabled via Gradle's `java-test-fixtures` plugin and shared across both unit and integration tests.
-  - Houses domain/DTO `*Fixtures` (Object Mothers), reusable HTTP `*ApiFixture` clients, `ProblemDetail` assertion
-    helpers (`ProblemDetailFixtures`), telemetry capture helpers (`LogCapture` and `MetricCapture`), and per-signal
+  - Houses domain/DTO `*Fixtures` (Object Mothers), stateful in-memory port fakes (`FakeOrderRepository`,
+    `FakePaymentGateway`), reusable HTTP `*ApiFixture` clients, `ProblemDetail` assertion helpers
+    (`ProblemDetailFixtures`), telemetry capture helpers (`LogCapture`, `MetricCapture`, `SpanCapture`), and per-signal
     telemetry assertion extensions (`*TelemetryFixtures`).
   - Keep internal helper properties/functions `private` and prune unused fixture helpers.
 - **Unit Tests (`src/test/kotlin`)**:
@@ -32,8 +33,8 @@ Each service module configures three test source sets via `conventions.spring`:
   - **Ascending HTTP status order**: Within each endpoint integration test class, order test methods by ascending HTTP
     response status (`2xx` → `4xx` → `5xx`, e.g., `200`/`201` → `400` → `404` → `409` → `422` → `504`).
   - **Persistence adapter tests**: Verify the repository port contract (`save`, `findById`, missing-ID behavior,
-    `count`) against the real database. Do not replay domain state-machine transitions already verified in domain unit
-    tests and HTTP endpoint integration tests.
+    `count`) on concrete adapters (such as `MongoOrderRepository`) against the real database. Do not replay domain
+    state-machine transitions already verified in domain unit tests and HTTP endpoint integration tests.
   - **Outbound client adapter tests**: Group test methods by client method (in the port's declaration order), then by
     ascending HTTP status within each group. Cover every status the downstream service returns for that call, plus
     exactly one unhandled status (`500`) per client method.
@@ -52,8 +53,9 @@ Each service module configures three test source sets via `conventions.spring`:
   - Standalone `:e2e` Gradle subproject (`conventions.kotlin`, zero project dependencies on `:observed-app` or
     `:traffic-generator`) that treats the running Docker Compose stack as a black box via HTTP (`HttpClient`) and
     Docker CLI (`ProcessBuilder`).
-  - Default `:e2e:test` is disabled so `./gradlew check` stays fast and Docker-free while still running Ktlint, Detekt,
-    and the build-time `verifyOtelApiBoundary` runtime classpath check contributed by `conventions.opentelemetry`.
+  - Default `:e2e:test` is disabled so `./gradlew check` does not require the full Docker Compose stack while still
+    running Ktlint, Detekt, unit tests, Testcontainers integration tests, and the build-time `verifyOtelApiBoundary`
+    runtime classpath check contributed by `conventions.opentelemetry`.
   - Executed against the live topology via `./gradlew :e2e:e2eTest` (or `make verify`), using `E2eSuiteHarness` for
     one-time readiness polling and 7-scenario triggering and Awaitility (`await atMost ... untilAsserted`) with
     OpenSearch index refreshes (`/_refresh`).

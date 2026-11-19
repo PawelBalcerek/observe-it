@@ -105,6 +105,72 @@ define pure Kotlin tracing ports in the `domain` layer (see
 | **Observed App**      | `order.ship`        | `INTERNAL` | `order.id`, `customer.id`, `shipping.method`, event `order.state.transitioned`                                   | `Unset` (records `error.type=INVALID_STATE_TRANSITION` on 409)        |
 | **Observed App**      | `order.cancel`      | `INTERNAL` | `order.id`, `customer.id`, `cancellation.reason`, event `order.state.transitioned`                               | `Unset` (records `error.type=INVALID_STATE_TRANSITION` on 409)        |
 
+## Database Client Spans, Stable Semantic Conventions & Noise Suppression
+
+When a service persists entities in an external database, zero-code driver instrumentation automatically creates
+`SpanKind.CLIENT` spans underneath the active `INTERNAL` domain span. Seeing every read and write command directly in
+the trace waterfall isolates slow queries, lock contention, and unintended N+1 access patterns without hand-instrumenting
+repository methods.
+
+Enabling database telemetry cleanly in production requires addressing four practical pitfalls:
+
+1. **Opting into stable database semantic conventions without schema collisions**: OpenTelemetry database instrumentation
+   migrated from legacy attributes (`db.system`, `db.operation`, `db.statement`) to stable nested names (`db.system.name`,
+   `db.namespace`, `db.collection.name`, `db.operation.name`, `db.query.text`) alongside the `db.client.operation.duration`
+   histogram. Opting into stable-only mode avoids emitting both generations simultaneously—which otherwise causes search
+   backends to reject documents where a dotted path is both a scalar string (`db.system`) and a nested object
+   (`db.system.name`).
+2. **Avoiding redundant ORM or repository proxy spans**: High-level repository proxy instrumentation can insert an
+   extra `INTERNAL` span between the domain span and the database driver `CLIENT` span. Invoking the database template or
+   driver directly—and disabling proxy auto-instrumentation—keeps the trace tree concise.
+3. **Suppressing high-frequency background probes**: Periodic metric callbacks (such as a 1 Hz collection-size gauge) and
+   container health checks (`ping`, `hello`, or `/health` HTTP probes) run outside any user request. Suppressing
+   instrumentation in-process around internal gauge callbacks prevents unparented root spans from ever being allocated,
+   while Collector `filter` rules drop periodic health-probe spans without disabling real readiness checks.
+4. **Sizing query text mappings**: Sanitized multi-field commands in `db.query.text` can exceed default 1,024-byte
+   keyword indexing limits in search backends; raising `ignore_above` preserves full query visibility in query
+   interfaces.
+
+### External Sources & Ecosystem Practice
+
+- [OpenTelemetry Semantic Conventions for Database Spans](https://opentelemetry.io/docs/specs/semconv/database/database-spans/)
+  — Stable `db.system.name`, `db.namespace`, `db.collection.name`, `db.operation.name`, and sanitized `db.query.text`
+  span attributes and span naming (`{db.operation.name} {target}`).
+- [OpenTelemetry Semantic Conventions for MongoDB](https://opentelemetry.io/docs/specs/semconv/database/mongodb/) —
+  MongoDB-specific `db.collection.name`, `db.operation.name`, and sanitized command text rules.
+- [OpenTelemetry Java Instrumentation: Database Stability Opt-In](https://opentelemetry.io/docs/zero-code/java/agent/configuration/#database-semantic-conventions)
+  — Configuring `OTEL_SEMCONV_STABILITY_OPT_IN=database` to emit stable database spans and metrics.
+
+### In Observe-It
+
+In Observe-It, `observed-app` sets `OTEL_SEMCONV_STABILITY_OPT_IN=database` and
+`OTEL_INSTRUMENTATION_SPRING_DATA_ENABLED=false` in
+[`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) and talks to MongoDB
+through `MongoTemplate` in
+[`MongoOrderRepository`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/main/kotlin/com/observeit/observedapp/order/infrastructure/MongoOrderRepository.kt)
+(see [ADR-0010](../adr/0010-mongodb-order-persistence-and-ttl-retention.md) and
+[ADR-0011](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md)). Across a `HAPPY_PATH` **Checkout
+Scenario**, every **Order** domain span parents its MongoDB `CLIENT` spans directly:
+
+- `order.create` → `update orders` (`upsert: true`)
+- `order.reserve`, `order.pay`, and `order.ship` → `find orders` followed by `update orders` (3 `find orders` + 4 `update
+  orders` spans in total)
+
+Background noise is eliminated at two boundaries:
+
+- **In-process**:
+  [`OtelOrderMetrics`](https://github.com/PawelBalcerek/observe-it/blob/main/observed-app/src/main/kotlin/com/observeit/observedapp/order/infrastructure/OtelOrderMetrics.kt)
+  wraps `orderRepository.count()` inside `InstrumentationUtil.suppressInstrumentation { ... }` so the 1 Hz
+  `order.repository.size` gauge callback emits zero unparented `count orders` spans.
+- **Collector**:
+  [`docker/otel-collector/config.yaml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/otel-collector/config.yaml)
+  drops `/actuator/health` HTTP spans and MongoDB `hello`, `isMaster`, and `listDatabases` admin commands via
+  `filter/traces`.
+
+To preserve full sanitized multi-item **Order** BSON commands,
+[`docker/opensearch/traces-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-index-template.json)
+maps `attributes.db.query.text` as `keyword` with `ignore_above: 8192`.
+
 ## SS4O Trace Indexing, Ingest Normalization & Cross-Signal Correlation
 
 Routing OTLP spans from an OpenTelemetry Collector into an OpenSearch cluster using `ss4o` mode stores all three
@@ -145,8 +211,8 @@ Specifically, an ingest pipeline and index template for SS4O traces should:
 [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) enables OTLP trace
 export on both services (`OTEL_TRACES_EXPORTER=otlp`, `OTEL_BSP_SCHEDULE_DELAY=1000`), and
 [`docker/otel-collector/config.yaml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/otel-collector/config.yaml)
-routes spans through `service.pipelines.traces` (`otlp` → `memory_limiter` → `batch` → `opensearch` in `ss4o` mode,
-`dataset: observe-it`, `namespace: local`).
+routes spans through `service.pipelines.traces` (`otlp` → `memory_limiter` → `filter/traces` → `batch` → `opensearch`
+in `ss4o` mode, `dataset: observe-it`, `namespace: local`).
 
 Before the Collector starts,
 [`docker/opensearch/bootstrap.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/bootstrap.sh)
@@ -157,8 +223,11 @@ registers:
   `version`, and `env`, and strips `attributes.data_stream`.
 - [`observe-it-ss4o-traces`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-index-template.json):
   matches `ss4o_traces-*` (priority 200, 1 shard, 0 replicas, `default_pipeline: observe-it-traces-pipeline`), mapping
-  `traceId`, `spanId`, `parentSpanId`, `name`, `kind`, `status.code`, and domain `attributes.*` as `keyword`,
-  `durationInNanos` as `long`, `durationMs` as `double`, and `events.attributes.exception.*` for 504 stack traces.
+  `traceId`, `spanId`, `parentSpanId`, `name`, `kind`, `status.code`, domain `attributes.*`, and stable
+  `attributes.db.*` (`system.name`, `namespace`, `collection.name`, `operation.name`, `query.summary`,
+  `response.status_code`) as `keyword`, `attributes.db.query.text` as `keyword` with `ignore_above: 8192`,
+  `attributes.db.operation.batch.size` and `durationInNanos` as `long`, `durationMs` as `double`, and
+  `events.attributes.exception.*` for 504 stack traces.
 
 Because `ss4o_logs-*`, `ss4o_metrics-*`, and `ss4o_traces-*` share top-level `service`, `version`, `env`, and
 `attributes.order.id` (alongside `traceId` across logs and traces), you can pivot directly between **SS4O Traces Index**,

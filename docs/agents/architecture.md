@@ -72,8 +72,11 @@ Dependencies point strictly inward toward `domain` (`api` → `domain` ← `infr
      `NotFoundException`) in the root `domain` package.
 
 3. **`<feature>/infrastructure` (Driven Adapters)**:
-   - Contains concrete implementations of `domain` ports (`@Repository` stores, HTTP client adapters, simulated
-     gateways, background workers).
+   - Contains concrete implementations of `domain` ports (`@Repository` persistence adapters such as
+     `MongoOrderRepository`, HTTP client adapters, simulated gateways, background workers).
+   - Keep persistence mapping models (`OrderDocument` with `@Document`, `@Field`, `@Indexed`) and framework client
+     templates (`MongoTemplate`) strictly inside `infrastructure` so `domain` stays free of persistence annotations and
+     redundant repository proxy interfaces.
    - Encapsulates storage data structures, framework configuration properties (`@Value`, `@ConfigurationProperties`),
      and external I/O behind the `domain` port interface.
    - **Non-blocking delays & monotonic elapsed time**: Schedule artificial or simulated delays with
