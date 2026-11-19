@@ -4,7 +4,7 @@ object E2eConfig {
     val imageTag: String =
         System.getenv("OBSERVE_IT_IMAGE_TAG")?.takeIf { it.isNotBlank() }
             ?: System.getProperty("observeIt.projectVersion")?.takeIf { it.isNotBlank() }
-            ?: "0.3.0"
+            ?: "0.4.0"
 
     val imagePrefix: String =
         System.getenv("OBSERVE_IT_IMAGE_PREFIX")?.takeIf { it.isNotBlank() }

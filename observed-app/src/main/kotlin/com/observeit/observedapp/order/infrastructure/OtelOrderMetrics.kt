@@ -12,6 +12,7 @@ import com.observeit.observedapp.order.domain.PaymentOutcome
 import io.opentelemetry.api.OpenTelemetry
 import io.opentelemetry.api.common.AttributeKey.stringKey
 import io.opentelemetry.api.common.Attributes
+import io.opentelemetry.api.impl.InstrumentationUtil
 import org.springframework.stereotype.Component
 import java.util.Currency
 
@@ -46,7 +47,9 @@ class OtelOrderMetrics(openTelemetry: OpenTelemetry, orderRepository: OrderRepos
             .ofLongs()
             .setUnit(Units.ORDER)
             .buildWithCallback { measurement ->
-                measurement.record(orderRepository.count().toLong())
+                InstrumentationUtil.suppressInstrumentation {
+                    measurement.record(orderRepository.count().toLong())
+                }
             }
     }
 

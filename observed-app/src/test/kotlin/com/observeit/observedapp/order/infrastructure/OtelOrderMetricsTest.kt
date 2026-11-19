@@ -1,5 +1,6 @@
 package com.observeit.observedapp.order.infrastructure
 
+import com.observeit.observedapp.order.FakeOrderRepository
 import com.observeit.observedapp.order.OrderFixtures.anOrder
 import com.observeit.observedapp.order.domain.InventoryOutcome.LOW_STOCK_WARNING
 import com.observeit.observedapp.order.domain.InventoryOutcome.OUT_OF_STOCK
@@ -20,7 +21,7 @@ class OtelOrderMetricsTest {
     @RegisterExtension
     val metricCapture = MetricCapture()
 
-    private val repository = InMemoryOrderRepository()
+    private val repository = FakeOrderRepository()
     private val metrics = OtelOrderMetrics(metricCapture.openTelemetry, repository)
 
     @Test
