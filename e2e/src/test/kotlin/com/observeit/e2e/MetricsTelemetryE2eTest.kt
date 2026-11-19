@@ -198,6 +198,66 @@ class MetricsTelemetryE2eTest {
         }
     }
 
+    @Test
+    fun `db_client_operation_duration metrics record find and update operations without noise`() {
+        // given
+        val noiseQuery = mapOf(
+            "bool" to mapOf(
+                "should" to listOf(
+                    mapOf(
+                        "bool" to mapOf(
+                            "must" to listOf(
+                                mapOf("term" to mapOf("name" to DB_CLIENT_OPERATION_DURATION)),
+                                mapOf(
+                                    "terms" to mapOf(
+                                        "attributes.db.operation.name" to listOf(
+                                            "count",
+                                            "hello",
+                                            "isMaster",
+                                            "listDatabases",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    mapOf(
+                        "bool" to mapOf(
+                            "must" to listOf(
+                                mapOf("term" to mapOf("name" to "http.server.request.duration")),
+                                mapOf(
+                                    "bool" to mapOf(
+                                        "should" to listOf(
+                                            mapOf("term" to mapOf("attributes.http.route" to "/actuator/health")),
+                                            mapOf("term" to mapOf("attributes.url.path" to "/actuator/health")),
+                                        ),
+                                        "minimum_should_match" to 1,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                "minimum_should_match" to 1,
+            ),
+        )
+
+        // when / then
+        await atMost AWAIT_TIMEOUT untilAsserted {
+            openSearch.refresh(METRICS_INDEX)
+            assertSoftly {
+                metricTermsKeys(DB_CLIENT_OPERATION_DURATION, "attributes.db.operation.name") shouldContainAll listOf(
+                    "find",
+                    "update",
+                )
+                metricTermsKeys(DB_CLIENT_OPERATION_DURATION, "attributes.db.system.name") shouldContainAll listOf(
+                    "mongodb",
+                )
+                openSearch.count(METRICS_INDEX, noiseQuery) shouldBe 0L
+            }
+        }
+    }
+
     private fun metricTermsKeys(metricName: String, fieldName: String): Set<String> = openSearch.termsAggregationKeys(
         index = METRICS_INDEX,
         field = fieldName,
@@ -206,6 +266,7 @@ class MetricsTelemetryE2eTest {
 
     private companion object {
         const val METRICS_INDEX = "ss4o_metrics-observe-it-local"
+        const val DB_CLIENT_OPERATION_DURATION = "db.client.operation.duration"
         val AWAIT_TIMEOUT: Duration = Duration.ofSeconds(30)
 
         @JvmStatic

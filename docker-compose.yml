@@ -74,6 +74,24 @@ services:
     networks:
       - observe-it-net
 
+  mongodb:
+    image: mongo:8.0.38
+    container_name: mongodb
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25", "--bind_ip_all"]
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - observe-it-net
+
   observed-app:
     image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/observed-app:${OBSERVE_IT_IMAGE_TAG:-0.4.0}
     container_name: observed-app
@@ -82,10 +100,13 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      - SPRING_MONGODB_URI=mongodb://mongodb:27017/observe_it
       - BPL_JVM_THREAD_COUNT=50
       - OTEL_JAVAAGENT_ENABLED=true
       - OTEL_SERVICE_NAME=observed-app
       - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.4.0},deployment.environment.name=local
+      - OTEL_SEMCONV_STABILITY_OPT_IN=database
+      - OTEL_INSTRUMENTATION_SPRING_DATA_ENABLED=false
       - OTEL_LOGS_EXPORTER=otlp
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_BSP_SCHEDULE_DELAY=1000
@@ -101,6 +122,8 @@ services:
     depends_on:
       otel-collector:
         condition: service_started
+      mongodb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "/cnb/lifecycle/launcher", "--", "java", "-Dotel.javaagent.enabled=false", "-cp", "/workspace/BOOT-INF/classes:/workspace/BOOT-INF/lib/*", "com.observeit.observedapp.HealthCheck"]
       interval: 10s
@@ -155,4 +178,6 @@ networks:
 
 volumes:
   opensearch-data:
+    driver: local
+  mongodb-data:
     driver: local

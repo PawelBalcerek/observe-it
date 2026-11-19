@@ -4,9 +4,13 @@ import com.observeit.e2e.config.E2eConfig
 import com.observeit.e2e.fixtures.E2eSuiteHarness
 import com.observeit.e2e.fixtures.E2eSuiteHarness.openSearch
 import io.kotest.assertions.assertSoftly
+import io.kotest.matchers.collections.shouldBeIn
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotBeBlank
+import io.kotest.matchers.string.shouldNotContain
 import org.awaitility.kotlin.atMost
 import org.awaitility.kotlin.await
 import org.awaitility.kotlin.untilAsserted
@@ -277,6 +281,75 @@ class TracesTelemetryE2eTest {
             assertSoftly {
                 logsCount shouldBeGreaterThan 0L
                 matchedSpanIds.toLong() shouldBeGreaterThan 0L
+            }
+        }
+    }
+
+    @Test
+    fun `MongoDB Client spans use stable database semconv, filter noise, and parent to HAPPY_PATH order spans`() {
+        // given
+        val orderId = happyPathOrderId
+        val noiseQuery = mapOf(
+            "bool" to mapOf(
+                "should" to listOf(
+                    mapOf("term" to mapOf("name" to "count orders")),
+                    mapOf(
+                        "terms" to mapOf(
+                            "attributes.db.operation.name" to listOf("hello", "isMaster", "listDatabases"),
+                        ),
+                    ),
+                    mapOf("term" to mapOf("attributes.http.route" to "/actuator/health")),
+                    mapOf("term" to mapOf("attributes.url.path" to "/actuator/health")),
+                ),
+                "minimum_should_match" to 1,
+            ),
+        )
+
+        // when / then
+        await atMost AWAIT_TIMEOUT untilAsserted {
+            openSearch.refresh(TRACES_INDEX)
+            val traceId = findHappyPathTraceId(orderId)
+            val traceSpans = openSearch.search(
+                TRACES_INDEX,
+                query = mapOf("term" to mapOf("traceId" to traceId)),
+                size = 100,
+            ).path("hits").path("hits").values().map { it.path("_source") }
+
+            val spanIdsByName = traceSpans.associate {
+                it.path("name").asString("") to it.path("spanId").asString("")
+            }
+            val mongoSpans = traceSpans.filter {
+                it.path("attributes").path("db.system.name").asString("") == "mongodb"
+            }
+            val findSpans = mongoSpans.filter { it.path("name").asString("") == "find orders" }
+            val updateSpans = mongoSpans.filter { it.path("name").asString("") == "update orders" }
+
+            assertSoftly {
+                findSpans.size shouldBe 4
+                updateSpans.size shouldBe 4
+                (findSpans + updateSpans).forEach { span ->
+                    span.path("kind").asString("") shouldBeIn CLIENT_KINDS
+                    val attributes = span.path("attributes")
+                    attributes.path("db.namespace").asString("") shouldBe "observe_it"
+                    attributes.path("db.collection.name").asString("") shouldBe "orders"
+                    val queryText = attributes.path("db.query.text").asString("")
+                    queryText.shouldNotBeBlank()
+                    queryText shouldContain "\"?\""
+                    queryText shouldNotContain orderId
+                }
+                findSpans.map { it.path("parentSpanId").asString("") }.toSet() shouldBe setOf(
+                    spanIdsByName.getValue("order.reserve"),
+                    spanIdsByName.getValue("order.pay"),
+                    spanIdsByName.getValue("order.ship"),
+                    spanIdsByName.getValue("order.get"),
+                )
+                updateSpans.map { it.path("parentSpanId").asString("") }.toSet() shouldBe setOf(
+                    spanIdsByName.getValue("order.create"),
+                    spanIdsByName.getValue("order.reserve"),
+                    spanIdsByName.getValue("order.pay"),
+                    spanIdsByName.getValue("order.ship"),
+                )
+                openSearch.count(TRACES_INDEX, noiseQuery) shouldBe 0L
             }
         }
     }

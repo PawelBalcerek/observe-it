@@ -198,6 +198,45 @@
                 "type": { "type": "keyword" }
               }
             },
+            "db": {
+              "properties": {
+                "system": {
+                  "properties": {
+                    "name": { "type": "keyword" }
+                  }
+                },
+                "namespace": { "type": "keyword" },
+                "collection": {
+                  "properties": {
+                    "name": { "type": "keyword" }
+                  }
+                },
+                "operation": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "batch": {
+                      "properties": {
+                        "size": { "type": "long" }
+                      }
+                    }
+                  }
+                },
+                "query": {
+                  "properties": {
+                    "text": {
+                      "type": "keyword",
+                      "ignore_above": 8192
+                    },
+                    "summary": { "type": "keyword" }
+                  }
+                },
+                "response": {
+                  "properties": {
+                    "status_code": { "type": "keyword" }
+                  }
+                }
+              }
+            },
             "http": {
               "properties": {
                 "request": {
