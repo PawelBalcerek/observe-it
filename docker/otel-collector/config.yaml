@@ -52,6 +52,10 @@ exporters:
     endpoint: "http://prometheus:9090/api/v1/otlp"
     tls:
       insecure: true
+  otlp/dataprepper:
+    endpoint: "data-prepper:21890"
+    tls:
+      insecure: true
 
 service:
   pipelines:
@@ -67,7 +71,11 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, filter/metrics, cumulative_to_delta, batch]
       exporters: [opensearch]
-    traces:
+    traces/opensearch:
       receivers: [otlp]
       processors: [memory_limiter, filter/traces, batch]
       exporters: [opensearch]
+    traces/dataprepper:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/traces, batch]
+      exporters: [otlp/dataprepper]

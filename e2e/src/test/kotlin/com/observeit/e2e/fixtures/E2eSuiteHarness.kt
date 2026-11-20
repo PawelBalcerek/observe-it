@@ -53,6 +53,9 @@ object E2eSuiteHarness {
         await.ignoreExceptions() atMost Duration.ofSeconds(60) untilAsserted {
             docker.containerHealthStatus("prometheus") shouldBe "healthy"
         }
+        await.ignoreExceptions() atMost Duration.ofSeconds(120) untilAsserted {
+            docker.containerHealthStatus("data-prepper") shouldBe "healthy"
+        }
         await.ignoreExceptions() atMost Duration.ofSeconds(60) untilAsserted {
             docker.containerStateStatus("otel-collector") shouldBe "running"
         }

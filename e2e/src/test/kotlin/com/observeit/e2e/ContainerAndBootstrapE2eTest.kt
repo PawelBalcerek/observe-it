@@ -41,6 +41,7 @@ class ContainerAndBootstrapE2eTest {
         val opensearchHealth = docker.containerHealthStatus("opensearch")
         val mongodbHealth = docker.containerHealthStatus("mongodb")
         val prometheusHealth = docker.containerHealthStatus("prometheus")
+        val dataPrepperHealth = docker.containerHealthStatus("data-prepper")
         val dashboardsState = dashboards.overallStatusState()
         val collectorState = docker.containerStateStatus("otel-collector")
         val observedAppHealth = actuator.healthStatus(E2eConfig.OBSERVED_APP_BASE_URL)
@@ -53,6 +54,7 @@ class ContainerAndBootstrapE2eTest {
             opensearchHealth shouldBe "healthy"
             mongodbHealth shouldBe "healthy"
             prometheusHealth shouldBe "healthy"
+            dataPrepperHealth shouldBe "healthy"
             dashboardsState shouldBe "green"
             collectorState shouldBe "running"
             observedAppHealth shouldBe "UP"
@@ -79,6 +81,7 @@ class ContainerAndBootstrapE2eTest {
             "opensearch",
             "opensearch-dashboards",
             "prometheus",
+            "data-prepper",
             "otel-collector",
             "mongodb",
             "observed-app",
