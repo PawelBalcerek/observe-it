@@ -10,6 +10,7 @@ services:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - DISABLE_INSTALL_DEMO_CONFIG=true
       - DISABLE_SECURITY_PLUGIN=true
+      - plugins.query.datasources.encryption.masterkey=0123456789abcdef01234567
     ulimits:
       memlock:
         soft: -1
@@ -34,9 +35,11 @@ services:
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:3.9.0
     container_name: opensearch-dashboards
+    command: ["opensearch-dashboards", "-c", "/usr/share/opensearch-dashboards/config/observe-it.yml"]
     environment:
-      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'
       - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    volumes:
+      - ./docker/opensearch-dashboards/observe-it.yml:/usr/share/opensearch-dashboards/config/observe-it.yml:ro
     mem_limit: 512m
     ports:
       - "127.0.0.1:5601:5601"
@@ -58,6 +61,8 @@ services:
         condition: service_healthy
       opensearch-dashboards:
         condition: service_started
+      prometheus:
+        condition: service_healthy
     networks:
       - observe-it-net
 

@@ -17,6 +17,28 @@ class OpenSearchClientFixture(
         return response.size() > 0
     }
 
+    fun getSqlDatasource(name: String): JsonNode = http.getJson("$baseUrl/_plugins/_query/_datasources/$name")
+
+    fun queryPromQlRange(
+        datasourceName: String,
+        promQl: String,
+        startEpochSeconds: Long,
+        endEpochSeconds: Long,
+        step: String = "60s",
+    ): List<PromQlSeries> {
+        val query = "source = $datasourceName.query_range('$promQl', $startEpochSeconds, $endEpochSeconds, '$step')"
+        val response = http.postJson("$baseUrl/_plugins/_ppl", mapOf("query" to query))
+        val schemaNames = response.path("schema").values().map { it.path("name").asString("") }
+        val labelsIndex = schemaNames.indexOf("@labels")
+        val valueIndex = schemaNames.indexOf("@value")
+        return response.path("datarows").values().map { row ->
+            val labels = row.path(labelsIndex).properties().asSequence()
+                .associate { (key, value) -> key to value.asString("") }
+            val values = row.path(valueIndex).values().map { it.asDouble(0.0) }
+            PromQlSeries(labels = labels, values = values)
+        }
+    }
+
     fun clusterHealthStatus(index: String): String =
         http.getJson("$baseUrl/_cluster/health/$index").path("status").asString("")
 
@@ -79,4 +101,6 @@ class OpenSearchClientFixture(
     }
 
     data class IndexSettings(val shards: Int, val replicas: Int)
+
+    data class PromQlSeries(val labels: Map<String, String>, val values: List<Double>)
 }
