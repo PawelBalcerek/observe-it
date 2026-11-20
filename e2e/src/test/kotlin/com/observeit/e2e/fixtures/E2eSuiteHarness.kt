@@ -16,6 +16,7 @@ object E2eSuiteHarness {
     private val trafficGenerator: TrafficGeneratorClientFixture = TrafficGeneratorClientFixture(http)
     val openSearch: OpenSearchClientFixture = OpenSearchClientFixture(http)
     val dashboards: DashboardsClientFixture = DashboardsClientFixture(http)
+    val prometheus: PrometheusClientFixture = PrometheusClientFixture(http)
 
     val allScenarios: List<String> = listOf(
         "HAPPY_PATH",
@@ -48,6 +49,9 @@ object E2eSuiteHarness {
         }
         await.ignoreExceptions() atMost Duration.ofSeconds(120) untilAsserted {
             dashboards.overallStatusState() shouldBe "green"
+        }
+        await.ignoreExceptions() atMost Duration.ofSeconds(60) untilAsserted {
+            docker.containerHealthStatus("prometheus") shouldBe "healthy"
         }
         await.ignoreExceptions() atMost Duration.ofSeconds(60) untilAsserted {
             docker.containerStateStatus("otel-collector") shouldBe "running"

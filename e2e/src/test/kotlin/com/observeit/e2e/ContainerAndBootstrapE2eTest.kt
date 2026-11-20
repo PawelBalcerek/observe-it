@@ -40,6 +40,7 @@ class ContainerAndBootstrapE2eTest {
         // when
         val opensearchHealth = docker.containerHealthStatus("opensearch")
         val mongodbHealth = docker.containerHealthStatus("mongodb")
+        val prometheusHealth = docker.containerHealthStatus("prometheus")
         val dashboardsState = dashboards.overallStatusState()
         val collectorState = docker.containerStateStatus("otel-collector")
         val observedAppHealth = actuator.healthStatus(E2eConfig.OBSERVED_APP_BASE_URL)
@@ -51,6 +52,7 @@ class ContainerAndBootstrapE2eTest {
         assertSoftly {
             opensearchHealth shouldBe "healthy"
             mongodbHealth shouldBe "healthy"
+            prometheusHealth shouldBe "healthy"
             dashboardsState shouldBe "green"
             collectorState shouldBe "running"
             observedAppHealth shouldBe "UP"
@@ -58,5 +60,29 @@ class ContainerAndBootstrapE2eTest {
             bootstrapState shouldBe "exited"
             bootstrapExitCode shouldBe 0
         }
+    }
+
+    @Test
+    fun `all running continuous containers have zero OOMKilled events`() {
+        // given
+        ensureStackReady()
+
+        // when
+        val oomKilledByContainer = CONTINUOUS_CONTAINERS.associateWith { docker.containerOomKilled(it) }
+
+        // then
+        oomKilledByContainer shouldBe CONTINUOUS_CONTAINERS.associateWith { false }
+    }
+
+    private companion object {
+        val CONTINUOUS_CONTAINERS = listOf(
+            "opensearch",
+            "opensearch-dashboards",
+            "prometheus",
+            "otel-collector",
+            "mongodb",
+            "observed-app",
+            "traffic-generator",
+        )
     }
 }
