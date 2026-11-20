@@ -7,11 +7,12 @@
 [![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-blue)](https://pawelbalcerek.github.io/observe-it/)
 
 Observe-It is an open-source observability reference system and local sandbox for Kotlin/Spring Boot backend
-applications using OpenTelemetry and OpenSearch. Rather than a toy "hello world" or a tutorial that duplicates vendor
-documentation, it pairs a realistic multi-service system—an **Observed App** processing customer **Order** workflows
-and a continuous **Traffic Generator** driving normal, warning, and failure **Checkout Scenario** paths across every
-**Order State**—with OpenTelemetry instrumentation and an **SS4O Log Index**, **SS4O Metrics Index**, and **SS4O Traces
-Index** in OpenSearch.
+applications using OpenTelemetry, OpenSearch, and Prometheus. Rather than a toy "hello world" or a tutorial that
+duplicates vendor documentation, it pairs a realistic multi-service system—an **Observed App** processing customer
+**Order** workflows and a continuous **Traffic Generator** driving normal, warning, and failure **Checkout Scenario**
+paths across every **Order State**—with OpenTelemetry instrumentation, an **SS4O Log Index**, **SS4O Metrics Index**,
+**SS4O Traces Index**, **APM Span Index**, **APM Service Map Index**, **Prometheus Metrics Store**, and the
+OpenSearch Dashboards `3.9.0` **Observability Workspace**.
 
 Designed for production-minded JVM, Kotlin, and Spring Boot engineers seeking a realistic observability blueprint, as
 well as developers new to observability who need a guided entry point through multi-service telemetry, Observe-It
@@ -25,15 +26,20 @@ flowchart LR
   OA -->|"MongoDB Wire Protocol"| MDB["MongoDB (:27017)"]
   TG -.->|"OTLP gRPC (Java Agent)"| OC["OpenTelemetry Collector (:4317)"]
   OA -.->|"OTLP gRPC (Java Agent)"| OC
-  OC -->|"SS4O Logs, Metrics & Traces Pipelines"| OS["OpenSearch (:9200)"]
-  OSD["OpenSearch Dashboards (:5601)"] -->|"Discover & Dashboards"| OS
+  OC -->|"SS4O Logs, Metrics & Traces"| OS["OpenSearch (:9200)"]
+  OC -->|"OTLP HTTP Cumulative Metrics"| PROM["Prometheus (:9090)"]
+  OC -->|"OTLP gRPC Trace Fan-Out"| DP["Data Prepper (internal)"]
+  DP -->|"APM Spans & Service Map"| OS
+  DP -->|"span_derived RED Metrics"| PROM
+  OSD["OpenSearch Dashboards (:5601)"] -->|"Observability Workspace & Dashboards"| OS
+  OSD -->|"PromQL via OpenSearch SQL"| PROM
 ```
 
 ## 5-Minute Quick Start
 
 ### Prerequisites
 
-- **Container Runtime**: Docker with Compose v2 and at least ~3 GB available RAM.
+- **Container Runtime**: Docker with Compose v2 and at least ~4.25 GB available RAM.
 - **Java Development Kit** *(optional, for local builds)*: JDK 25 (or rely on Gradle toolchain auto-provisioning).
 
 ### Quick Start (Pre-Built Images)
@@ -57,16 +63,17 @@ docker compose up -d
 
 ### Explore Live Telemetry
 
-Once the containers are healthy, open OpenSearch Dashboards at `http://localhost:5601`:
+Once the containers are healthy, open OpenSearch Dashboards at `http://localhost:5601` and select the **Observe-It**
+**Observability Workspace**:
 
-1. Navigate to **Discover** to open any of the 4 log saved searches (`ss4o_logs-*`)—**All Order Logs**, **Warnings &
-   Business Rejections**, **Gateway Timeouts & Stack Traces**, or **Checkout Scenario Explorer**—switch to
-   `ss4o_metrics-*` for **All Metrics** and **Domain Order Metrics**, or switch to `ss4o_traces-*` for **All Trace
-   Spans**, **Checkout Scenario Traces**, **Domain Order Spans**, **Error & Timeout Spans**, and **MongoDB Client
-   Spans**.
-2. Navigate to **Dashboards** and open **Observe-It Metrics Overview** (including **MongoDB Operation Duration (s)**) or
-   **Observe-It Traces Overview** (including **MongoDB Client Span Latency by Operation (ms)**) for live **Order**,
-   **Checkout Scenario**, MongoDB, HTTP, and JVM visualizations.
+1. Navigate to **Explore → Logs** (`ss4o_logs-*`), **Explore → Metrics** (PromQL against the **Prometheus Metrics
+   Store** via `observe_it_prometheus`), and **Explore → Traces** (**APM Span Index** `otel-v1-apm-span-*` with
+   one-click **Traces → Logs** correlation).
+2. Navigate to **APM → Services** and **APM → Application Map** to inspect the `traffic-generator` → `observed-app` →
+   `mongodb` topology and `span_derived` RED KPIs.
+3. Navigate to **Dashboards** and open **Observe-It Metrics Overview** (including **MongoDB Operation Duration (s)**) or
+   **Observe-It Traces Overview** (including **MongoDB Client Span Latency by Operation (ms)**) alongside all classic
+   `ss4o_*` saved searches.
 
 > [!TIP]
 > To interactively trigger specific **Checkout Scenario** paths on demand or control workload rates, follow the
@@ -74,7 +81,7 @@ Once the containers are healthy, open OpenSearch Dashboards at `http://localhost
 
 ### Teardown
 
-Stop all containers and purge persisted OpenSearch data volumes:
+Stop all containers and purge persisted OpenSearch, MongoDB, and Prometheus data volumes:
 
 ```bash
 docker compose down -v
@@ -87,18 +94,25 @@ divided into the observability core you should focus on and supporting scaffoldi
 
 ### Start Here — The Observability Core
 
-Focus on these key files and components to understand how OpenTelemetry, MDC correlation, and OpenSearch are wired:
+Focus on these key files and components to understand how OpenTelemetry, MDC correlation, OpenSearch, Prometheus, and
+Data Prepper are wired:
 
-- [`docker-compose.yml`](docker-compose.yml) — Container network topology, health check dependency chain, and
-  OpenTelemetry Java Agent environment variable configuration.
-- [`docker/otel-collector/config.yaml`](docker/otel-collector/config.yaml) — OpenTelemetry Collector `logs`, `metrics`,
-  and `traces` pipelines: OTLP gRPC receiver, `memory_limiter`, `filter/traces` / `filter/metrics`, and `batch`
-  processors, and OpenSearch `ss4o` exporter.
-- [`docker/opensearch/`](docker/opensearch/) — OpenSearch bootstrap artifacts: `bootstrap.sh`,
-  `ingest-pipeline.json` (`observe-it-logs-pipeline`), `index-template.json` (`ss4o_logs-*`),
-  `metrics-ingest-pipeline.json` (`observe-it-metrics-pipeline`), `metrics-index-template.json` (`ss4o_metrics-*`),
-  `traces-ingest-pipeline.json` (`observe-it-traces-pipeline`), `traces-index-template.json` (`ss4o_traces-*`), and
-  `saved-objects.ndjson`.
+- [`docker-compose.yml`](docker-compose.yml) — 9-container network topology, health check dependency chain, memory
+  limits (`4.25 GB` baseline), and OpenTelemetry Java Agent environment variable configuration.
+- [`docker/otel-collector/config.yaml`](docker/otel-collector/config.yaml) — OpenTelemetry Collector `logs`,
+  dual-metrics (`metrics/prometheus` + `metrics/opensearch` via `cumulative_to_delta`), and trace fan-out
+  (`traces/opensearch` + `traces/dataprepper`) pipelines with `memory_limiter`, `filter/traces`, `filter/metrics`, and
+  `batch`.
+- [`docker/prometheus/`](docker/prometheus/) — Prometheus `3.16.0` configuration promoting `service.name`,
+  `service.version`, and `deployment.environment.name` on OTLP ingestion.
+- [`docker/data-prepper/`](docker/data-prepper/) — Traces-only Data Prepper `2.17.0` pipelines (`otel_traces`,
+  `otel_apm_service_map` with `dependency_nodes.enabled: true`, and Prometheus remote-write for `span_derived` RED
+  metrics).
+- [`docker/opensearch-dashboards/`](docker/opensearch-dashboards/) — `observe-it.yml` enabling the OpenSearch
+  Dashboards `3.9.0` **Observability Workspace**, Explore Logs/Metrics/Traces, and dataset management.
+- [`docker/opensearch/`](docker/opensearch/) — OpenSearch bootstrap artifacts: `bootstrap.sh`, SS4O ingest pipelines
+  and index templates (`ss4o_logs-*`, `ss4o_metrics-*`, `ss4o_traces-*`), `observe_it_prometheus` SQL datasource,
+  `observe-it` workspace + correlations, and `saved-objects.ndjson`.
 - [`build-logic/conventions/src/main/kotlin/conventions/opentelemetry.gradle.kts`](build-logic/conventions/src/main/kotlin/conventions/opentelemetry.gradle.kts)
   — OpenTelemetry convention plugin configuring the Paketo OpenTelemetry buildpack, OpenTelemetry API/testing
   dependencies, and runtime classpath boundary verification.
@@ -131,14 +145,15 @@ These modules support the realistic runtime environment but are secondary to the
 
 ## Observability Pillars & Roadmap
 
-Observe-It is developed across four sequential milestones, each adding an observability capability to the shared domain:
+Observe-It is developed across five sequential milestones, each adding an observability capability to the shared domain:
 
 | Milestone       | Pillar                               | Status   | Scope & Capabilities                                                                                                                                                                                                                                                                                                        |
 | :-------------- | :----------------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Milestone 1** | Structured Logging                   | Complete | SLF4J 2 fluent `.addKeyValue()` API, scoped MDC correlation (`checkout.scenario`, `order.id`, `customer.id`), zero-code OpenTelemetry Java Agent log bridge, OpenTelemetry Collector `ss4o` export, OpenSearch `observe-it-logs-pipeline` normalization, and pre-bootstrapped OpenSearch Dashboards saved searches.         |
 | **Milestone 2** | Metrics & Dashboards                 | Complete | Auto-instrumented JVM/HTTP metrics, pure `domain` metric ports (`OrderMetrics`, `TrafficMetrics`) over `opentelemetry-api`, 1-second `DELTA` OTLP export, `observe-it-metrics-pipeline` and `observe-it-ss4o-metrics`, `MetricCapture` in-memory tests, and the `Observe-It Metrics Overview` dashboard.                    |
 | **Milestone 3** | Distributed Tracing                  | Complete | End-to-end W3C `traceparent` propagation across the **Traffic Generator** and **Observed App**, pure `domain` span ports (`OrderTracer`, `TrafficTracer`), span events and error discipline, `observe-it-traces-pipeline` and `observe-it-ss4o-traces`, `SpanCapture` in-memory tests, and `Observe-It Traces Overview`.    |
-| **Milestone 4** | Database Observability & Persistence | Current  | Hexagonal `MongoOrderRepository` (`MongoTemplate`, BSON `Decimal128`, 1-hour TTL retention), singleton `@ServiceConnection` `MongoDBContainer` integration tests, `OTEL_SEMCONV_STABILITY_OPT_IN=database`, `InstrumentationUtil.suppressInstrumentation`, Collector health-probe filtering, and MongoDB Dashboards panels. |
+| **Milestone 4** | Database Observability & Persistence | Complete | Hexagonal `MongoOrderRepository` (`MongoTemplate`, BSON `Decimal128`, 1-hour TTL retention), singleton `@ServiceConnection` `MongoDBContainer` integration tests, `OTEL_SEMCONV_STABILITY_OPT_IN=database`, `InstrumentationUtil.suppressInstrumentation`, Collector health-probe filtering, and MongoDB Dashboards panels. |
+| **Milestone 5** | Observability Workspace & APM        | Current  | **Prometheus Metrics Store** (`v3.16.0`), app-side `CUMULATIVE` export + Collector dual-metrics (`cumulative_to_delta`) and trace fan-out, traces-only Data Prepper (**APM Span Index**, **APM Service Map Index**, `span_derived` RED metrics), and OpenSearch Dashboards `3.9.0` **Observability Workspace**.             |
 
 ## Documentation & Official Upstream References
 

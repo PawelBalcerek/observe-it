@@ -116,6 +116,14 @@ export default defineConfig({
               text: '0011: OTel MongoDB Telemetry & Noise Suppression',
               link: '/adr/0011-otel-mongodb-client-telemetry-and-span-suppression',
             },
+            {
+              text: '0012: Prometheus Metrics Store & Collector Temporality Split',
+              link: '/adr/0012-prometheus-metrics-store-and-collector-temporality-split',
+            },
+            {
+              text: '0013: Traces-Only Data Prepper & APM Service Map',
+              link: '/adr/0013-data-prepper-apm-trace-fanout-and-service-map',
+            },
           ],
         },
       ],

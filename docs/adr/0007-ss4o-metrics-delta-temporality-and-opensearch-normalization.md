@@ -2,6 +2,13 @@
 
 **Status:** Accepted
 
+> [!NOTE]
+> The app-side `DELTA` temporality setting in this ADR was amended by
+> [ADR-0012: Prometheus Metrics Store and OpenTelemetry Collector Temporality Split](0012-prometheus-metrics-store-and-collector-temporality-split.md).
+> Services now export default `CUMULATIVE` metrics, and the OpenTelemetry Collector converts points via
+> `cumulative_to_delta` on the `metrics/opensearch` branch so `observe-it-ss4o-metrics` and
+> `observe-it-metrics-pipeline` remain active and unchanged.
+
 ## Context
 
 When the OpenTelemetry Java Agent exports JVM, HTTP, and custom domain metrics over OTLP to the OpenTelemetry

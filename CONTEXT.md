@@ -34,3 +34,17 @@ Prometheus store
 **SS4O Traces Index**: The OpenSearch index conforming to the Simple Schema for Observability where OTLP trace span
 documents from the Observed App and Traffic Generator are stored and queried. _Avoid_: Trace bucket, span table,
 Jaeger store
+
+**Prometheus Metrics Store**: The Prometheus time-series store holding cumulative OTLP metrics from the **Observed App**
+and **Traffic Generator** alongside span-derived RED metrics for PromQL exploration and APM views. _Avoid_: Metrics
+index, TSDB bucket, OpenSearch metrics
+
+**APM Span Index**: The OpenSearch index holding OpenTelemetry trace spans formatted for OpenSearch Dashboards trace
+exploration, trace-to-log correlation, and APM drill-downs. _Avoid_: SS4O Traces Index, Jaeger store, raw trace bucket
+
+**APM Service Map Index**: The OpenSearch index storing aggregated service-to-service and dependency edges derived from
+trace spans to power the APM Services and Service Map views. _Avoid_: Topology table, dependency cache, trace index
+
+**Observability Workspace**: The OpenSearch Dashboards workspace unifying Logs, Metrics, Traces, cross-signal
+correlations, APM Services and Service Map, and classic Dashboards for Observe-It. _Avoid_: Tenant, Kibana space,
+classic Discover

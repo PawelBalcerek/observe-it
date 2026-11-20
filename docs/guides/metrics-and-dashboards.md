@@ -110,16 +110,20 @@ bucket boundaries (`PAYMENT_DURATION_BUCKETS` from `10.0` to `5000.0` ms in `Ote
 `MongoOrderRepository`) in `InstrumentationUtil.suppressInstrumentation { ... }` so 1 Hz gauge collection does not emit
 spurious `count` datapoints on `db.client.operation.duration`.
 
-## Delta Temporality, SS4O Metric Normalization & 64-Bit Field Mappings
+## Temporality Split, Prometheus Time-Series Ingestion & SS4O Metric Normalization
 
 OpenTelemetry metrics support two aggregation temporalities: `CUMULATIVE` (running totals since process startup) and
-`DELTA` (the change since the previous export interval). While Prometheus-style pull scrapers expect `CUMULATIVE`
-counters, search-index backends such as OpenSearch aggregate time-series documents over `@timestamp` buckets. With
-`DELTA` temporality, summing `value` across a 1-minute histogram bucket yields the exact event count in that window
-without derivative math or reset-detection scripts across container restarts.
+`DELTA` (the change since the previous export interval). Prometheus-compatible time-series stores and PromQL engines
+expect `CUMULATIVE` counters and histograms (`rate()`, `increase()`, `histogram_quantile()`), whereas search-index
+backends aggregate time-series documents over `@timestamp` buckets where `DELTA` points let bar charts sum `value`
+across a time window without derivative math or restart-reset scripts.
 
-When an OTLP exporter writes metric points into a search index, two schema pitfalls require explicit index templates and
-ingest normalization:
+Rather than locking application runtimes into a single backend's temporality preference, services can emit standard
+`CUMULATIVE` OTLP metrics while the OpenTelemetry Collector splits the stream into two isolated pipelines: a stateless
+`otlp_http` branch feeding a Prometheus time-series store and a `cumulative_to_delta` branch feeding the search index.
+
+When an OTLP exporter writes delta metric points into a search index, two schema pitfalls require explicit index
+templates and ingest normalization:
 
 1. **Integer width overflow**: Exporters that store integer and floating-point measurements in separate fields risk
    dynamic 32-bit `integer` inference if the first indexed document is small, causing large 64-bit byte gauges (such as
@@ -132,24 +136,36 @@ ingest normalization:
 
 - [OpenTelemetry Metrics Data Model — Temporality](https://opentelemetry.io/docs/specs/otel/metrics/data-model/#temporality)
   — Trade-offs between `DELTA` and `CUMULATIVE` aggregation temporality.
+- [Prometheus OTLP Receiver](https://prometheus.io/docs/prometheus/latest/feature_flags/#otlp-receiver) — Native
+  `/api/v1/otlp` ingestion and `promote_resource_attributes` configuration in Prometheus 3.x.
 - [OpenSearch Simple Schema for Observability (SS4O)](https://docs.opensearch.org/latest/observing-your-data/ss4o/)
   — SS4O metric document fields (`name`, `kind`, `unit`, `value@int`, `value@double`, `sum`, `count`, `min`, `max`).
 
 ### In Observe-It
 
-Both `observed-app` and `traffic-generator` export `DELTA` metrics every second in
+Both `observed-app` and `traffic-generator` export default `CUMULATIVE` metrics every second in
 [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml):
 
 ```yaml
 - OTEL_METRICS_EXPORTER=otlp
 - OTEL_METRIC_EXPORT_INTERVAL=1000
-- OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 ```
 
-The OpenTelemetry Collector routes metrics through its `metrics` pipeline (`receivers: [otlp]`,
-`processors: [memory_limiter, filter/metrics, batch]`, `exporters: [opensearch]`) to the `ss4o_metrics-observe-it-local`
-**SS4O Metrics Index**, dropping `/actuator/health` HTTP datapoints and MongoDB `hello`, `isMaster`, and `listDatabases`
-admin datapoints before indexing. At index time,
+The OpenTelemetry Collector splits incoming metrics into two isolated pipelines in
+[`docker/otel-collector/config.yaml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/otel-collector/config.yaml),
+dropping `/actuator/health` HTTP datapoints and MongoDB `hello`, `isMaster`, and `listDatabases` admin datapoints via
+`filter/metrics` on both branches:
+
+- **`metrics/prometheus`**: `[memory_limiter, filter/metrics, batch]` → stateless `otlp_http/prometheus` exporter to
+  `http://prometheus:9090/api/v1/otlp` in the **Prometheus Metrics Store** (`prom/prometheus:v3.16.0`), where
+  [`docker/prometheus/prometheus.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/prometheus/prometheus.yml)
+  promotes `service.name`, `service.version`, and `deployment.environment.name` directly onto every time series for
+  PromQL exploration in the **Observability Workspace**.
+- **`metrics/opensearch`**: `[memory_limiter, filter/metrics, cumulative_to_delta, batch]` (`initial_value: auto`,
+  `max_staleness: 1h`) → `opensearch` (`ss4o`) exporter to the `ss4o_metrics-observe-it-local` **SS4O Metrics Index**,
+  preserving the classic `Observe-It Metrics Overview` dashboard.
+
+At OpenSearch index time,
 [`docker/opensearch/metrics-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/metrics-index-template.json)
 enforces `value@int: long`, `value: double`, `value@double: double`, `count: long`, `sum/min/max: double`, explicit
 `attributes.db.*` and `attributes.network.peer.*` mappings for `db.client.operation.duration`, and attaches
@@ -160,9 +176,10 @@ as the `default_pipeline`. That Painless script promotes `resource['service.name
 unifies `value@double` / `value@int` into `value`, and strips `attributes.data_stream`.
 
 For full architectural rationale, see
-[ADR-0007: SS4O Metrics Delta Temporality and OpenSearch Schema Normalization](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md)
+[ADR-0007: SS4O Metrics Delta Temporality and OpenSearch Schema Normalization](../adr/0007-ss4o-metrics-delta-temporality-and-opensearch-normalization.md),
+[ADR-0011: OpenTelemetry MongoDB Client Telemetry, Stable Database Semconv, and Noise Suppression](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md),
 and
-[ADR-0011: OpenTelemetry MongoDB Client Telemetry, Stable Database Semconv, and Noise Suppression](../adr/0011-otel-mongodb-client-telemetry-and-span-suppression.md).
+[ADR-0012: Prometheus Metrics Store and OpenTelemetry Collector Temporality Split](../adr/0012-prometheus-metrics-store-and-collector-temporality-split.md).
 
 ## In-Memory Metric Verification in Unit & Integration Tests
 
