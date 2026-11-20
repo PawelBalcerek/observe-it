@@ -1,0 +1,79 @@
+otlp-pipeline:
+  delay: 10
+  source:
+    otlp:
+      port: 21890
+      ssl: false
+  route:
+    - traces: 'getEventType() == "TRACE"'
+  sink:
+    - pipeline:
+        name: "otel-traces-pipeline"
+        routes:
+          - "traces"
+
+otel-traces-pipeline:
+  delay: 100
+  source:
+    pipeline:
+      name: "otlp-pipeline"
+  sink:
+    - pipeline:
+        name: "traces-raw-pipeline"
+    - pipeline:
+        name: "service-map-pipeline"
+
+traces-raw-pipeline:
+  source:
+    pipeline:
+      name: "otel-traces-pipeline"
+  processor:
+    - otel_traces:
+  sink:
+    - opensearch:
+        hosts: ["http://opensearch:9200"]
+        insecure: true
+        index_type: trace-analytics-plain-raw
+
+service-map-pipeline:
+  delay: 100
+  source:
+    pipeline:
+      name: "otel-traces-pipeline"
+  processor:
+    - otel_apm_service_map:
+        window_duration: 60s
+        db_path: "/tmp/otel-apm-service-map/"
+        group_by_attributes: [telemetry.sdk.language]
+        dependency_nodes:
+          enabled: true
+  route:
+    - otel_apm_service_map_route: 'getEventType() == "SERVICE_MAP"'
+    - service_processed_metrics: 'getEventType() == "METRIC"'
+  sink:
+    - opensearch:
+        hosts: ["http://opensearch:9200"]
+        insecure: true
+        index_type: otel-v2-apm-service-map
+        routes: [otel_apm_service_map_route]
+    - pipeline:
+        name: "service-metrics-prometheus-pipeline"
+        routes: [service_processed_metrics]
+
+service-metrics-prometheus-pipeline:
+  delay: 100
+  source:
+    pipeline:
+      name: "service-map-pipeline"
+  processor:
+    - delete_entries:
+        with_keys:
+          - "/attributes/randomKey"
+          - "randomKey"
+  sink:
+    - prometheus:
+        url: "http://prometheus:9090/api/v1/write"
+        insecure: true
+        threshold:
+          max_events: 500
+          flush_interval: 5s
