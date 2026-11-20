@@ -13,6 +13,9 @@ class DockerClientFixture {
     fun containerExitCode(containerName: String): Int? =
         inspectFormat(containerName, "{{.State.ExitCode}}").toIntOrNull()
 
+    fun containerOomKilled(containerName: String): Boolean? =
+        inspectFormat(containerName, "{{.State.OOMKilled}}").toBooleanStrictOrNull()
+
     private fun inspectFormat(containerName: String, format: String): String {
         val result = runCommand(listOf("docker", "inspect", containerName, "--format", format))
         return if (result.exitCode == 0) result.stdout.trim() else ""

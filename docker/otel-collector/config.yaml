@@ -27,6 +27,9 @@ processors:
       - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "hello"
       - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "isMaster"
       - metric.name == "db.client.operation.duration" and datapoint.attributes["db.operation.name"] == "listDatabases"
+  cumulative_to_delta:
+    initial_value: auto
+    max_staleness: 1h
   batch:
     send_batch_size: 100
     timeout: 1s
@@ -45,6 +48,10 @@ exporters:
       enabled: true
     retry_on_failure:
       enabled: true
+  otlp_http/prometheus:
+    endpoint: "http://prometheus:9090/api/v1/otlp"
+    tls:
+      insecure: true
 
 service:
   pipelines:
@@ -52,9 +59,13 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [opensearch]
-    metrics:
+    metrics/prometheus:
       receivers: [otlp]
       processors: [memory_limiter, filter/metrics, batch]
+      exporters: [otlp_http/prometheus]
+    metrics/opensearch:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/metrics, cumulative_to_delta, batch]
       exporters: [opensearch]
     traces:
       receivers: [otlp]

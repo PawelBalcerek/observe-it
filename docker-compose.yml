@@ -61,6 +61,30 @@ services:
     networks:
       - observe-it-net
 
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-otlp-receiver"
+      - "--storage.tsdb.retention.time=1d"
+      - "--storage.tsdb.retention.size=256MB"
+    mem_limit: 256m
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - observe-it-net
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.164.0
     container_name: otel-collector
@@ -71,6 +95,8 @@ services:
     depends_on:
       opensearch-bootstrap:
         condition: service_completed_successfully
+      prometheus:
+        condition: service_healthy
     networks:
       - observe-it-net
 
@@ -93,7 +119,7 @@ services:
       - observe-it-net
 
   observed-app:
-    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/observed-app:${OBSERVE_IT_IMAGE_TAG:-0.4.0}
+    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/observed-app:${OBSERVE_IT_IMAGE_TAG:-0.5.0}
     container_name: observed-app
     pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}
     mem_limit: 512m
@@ -104,7 +130,7 @@ services:
       - BPL_JVM_THREAD_COUNT=50
       - OTEL_JAVAAGENT_ENABLED=true
       - OTEL_SERVICE_NAME=observed-app
-      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.4.0},deployment.environment.name=local
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.5.0},deployment.environment.name=local
       - OTEL_SEMCONV_STABILITY_OPT_IN=database
       - OTEL_INSTRUMENTATION_SPRING_DATA_ENABLED=false
       - OTEL_LOGS_EXPORTER=otlp
@@ -112,7 +138,6 @@ services:
       - OTEL_BSP_SCHEDULE_DELAY=1000
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_METRIC_EXPORT_INTERVAL=1000
-      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES=*
@@ -134,7 +159,7 @@ services:
       - observe-it-net
 
   traffic-generator:
-    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/traffic-generator:${OBSERVE_IT_IMAGE_TAG:-0.4.0}
+    image: ${OBSERVE_IT_IMAGE_PREFIX:-ghcr.io/pawelbalcerek/observe-it}/traffic-generator:${OBSERVE_IT_IMAGE_TAG:-0.5.0}
     container_name: traffic-generator
     pull_policy: ${OBSERVE_IT_PULL_POLICY:-missing}
     mem_limit: 512m
@@ -145,13 +170,12 @@ services:
       - BPL_JVM_THREAD_COUNT=50
       - OTEL_JAVAAGENT_ENABLED=true
       - OTEL_SERVICE_NAME=traffic-generator
-      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.4.0},deployment.environment.name=local
+      - OTEL_RESOURCE_ATTRIBUTES=service.version=${OBSERVE_IT_IMAGE_TAG:-0.5.0},deployment.environment.name=local
       - OTEL_LOGS_EXPORTER=otlp
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_BSP_SCHEDULE_DELAY=1000
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_METRIC_EXPORT_INTERVAL=1000
-      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES=*
@@ -180,4 +204,6 @@ volumes:
   opensearch-data:
     driver: local
   mongodb-data:
+    driver: local
+  prometheus-data:
     driver: local
