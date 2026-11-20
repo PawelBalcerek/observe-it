@@ -252,10 +252,12 @@ A structured investigation workflow follows three principles:
 
 ### In Observe-It
 
-Observe-It automatically provisions pre-configured saved searches into OpenSearch Dashboards at boot time via
+Observe-It automatically provisions pre-configured saved searches into the `observe-it` **Observability Workspace** at
+boot time via
 [`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson).
-Navigating to **Discover** at `http://localhost:5601` under the **SS4O Log Index** (`ss4o_logs-*`) provides four
-ready-to-use views:
+With the **Observability Workspace** enabled, **Explore → Logs** replaces the classic **Discover** entry in the left
+navigation, while all four `ss4o_logs-*` saved searches remain accessible inside the workspace (via **Dashboards
+Management → Saved Objects** or the **Explore** saved-search picker):
 
 | Saved Search                      | DQL Filter Predicate              | Selected Table Columns                                                                                                                                                                                | Primary Operational Purpose                                                         |
 | :-------------------------------- | :-------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------- |
@@ -371,9 +373,12 @@ A structured metric investigation workflow relies on two views:
 
 ### In Observe-It
 
-OpenSearch bootstrap provisions the `ss4o_metrics-*` **SS4O Metrics Index** pattern, two metric saved searches in
-**Discover**, ten visualizations, and the `Observe-It Metrics Overview` dashboard from
-[`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson):
+OpenSearch bootstrap provisions the `ss4o_metrics-*` **SS4O Metrics Index** pattern, two classic metric saved searches,
+ten visualizations, and the `Observe-It Metrics Overview` dashboard inside the `observe-it` **Observability Workspace**
+from
+[`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson).
+These classic `ss4o_metrics-*` views stay available alongside PromQL exploration in **Explore → Metrics** (covered
+below):
 
 | Saved Search           | DQL / Query Filter                | Selected Table Columns                                                                                                                                                                   | Primary Operational Purpose                                |
 | :--------------------- | :-------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
@@ -433,9 +438,12 @@ three-signal investigation follows a top-down pivot:
 
 ### In Observe-It
 
-OpenSearch bootstrap provisions the `ss4o_traces-*` **SS4O Traces Index** pattern, five trace saved searches in
-**Discover**, eight visualizations, and the `Observe-It Traces Overview` dashboard from
-[`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson):
+OpenSearch bootstrap provisions the `ss4o_traces-*` **SS4O Traces Index** pattern, five classic trace saved searches,
+eight visualizations, and the `Observe-It Traces Overview` dashboard inside the `observe-it` **Observability
+Workspace** from
+[`docker/opensearch/saved-objects.ndjson`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/saved-objects.ndjson).
+These classic `ss4o_traces-*` views complement the interactive trace waterfall, **Traces → Logs** correlation, and **APM
+Services / Service Map** views covered in the next section:
 
 | Saved Search               | DQL / Query Filter                                 | Selected Table Columns                                                                                                                                              | Primary Operational Purpose                                                    |
 | :------------------------- | :------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------- |
@@ -480,3 +488,87 @@ attributes.order.id: "2bf1b496-13da-4d08-9169-602d3c58b956"
 # 7. Pivot to Order metrics for the same Checkout Scenario (switch index pattern to ss4o_metrics-*)
 attributes.checkout.scenario: "PAYMENT_GATEWAY_TIMEOUT" and (name: order.* or name: traffic.*)
 ```
+
+## Exploring the Observability Workspace (Explore, PromQL & APM)
+
+Modern observability workspaces unify logs, metrics, distributed traces, and Application Performance Monitoring (APM)
+inside one workspace instead of forcing operators to stitch together separate query screens manually. When a workspace
+pairs a log index, a Prometheus-compatible time-series store, an APM span index, and an aggregated service map index
+with declarative cross-signal correlation metadata, incident triage follows a connected drill-down loop:
+
+1. **Service Map & APM RED KPIs**: Start from a live topology graph of caller services, downstream services, and
+   synthesized database dependency nodes, overlaid with Rate, Error/Fault, and Duration (RED) metrics derived from
+   spans.
+2. **Explore Metrics (PromQL)**: Slice cumulative counters, histograms (`rate()`, `increase()`,
+   `histogram_quantile()`), and span-derived RED series directly against the time-series store to quantify regressions
+   and verify label dimensions.
+3. **Explore Traces & One-Click Traces → Logs**: Open an interactive trace waterfall from an anomalous service or
+   operation, inspect nested client/database spans, and jump in one click to every correlated log record sharing the
+   same `traceId`.
+4. **Explore Logs**: Inspect structured log fields and stack traces alongside classic dashboards without switching
+   workspaces.
+
+### External Sources & Ecosystem Practice
+
+- [OpenSearch Dashboards Workspaces](https://docs.opensearch.org/latest/dashboards/workspace/workspace/) — Organizing
+  telemetry datasets, data connections, and saved objects inside an Observability workspace.
+- [OpenSearch Dashboards Observability & APM](https://docs.opensearch.org/latest/observing-your-data/index/) — Exploring
+  logs, PromQL metrics, traces, trace-to-log correlations, and APM service maps.
+- [Prometheus PromQL Basics](https://prometheus.io/docs/prometheus/latest/querying/basics/) — Instant vectors, range
+  selectors, `rate()`, `sum_over_time()`, and `histogram_quantile()` aggregations.
+
+### In Observe-It
+
+Opening `http://localhost:5601` lands in OpenSearch Dashboards `3.9.0`, where `bootstrap.sh` pre-provisions the
+`observe-it` **Observability Workspace** (`Observe-It`, `use-case-observability`). Select the **Observe-It** workspace
+from the landing page or workspace switcher. Inside the workspace, **Explore** (**Logs**, **Metrics**, **Traces**)
+replaces classic **Discover** in the left navigation, while **Dashboards** retains `Observe-It Metrics Overview`,
+`Observe-It Traces Overview`, and all classic `ss4o_*` saved searches.
+
+1. **Explore Logs (`ss4o_logs-*`)**:
+   Open **Explore → Logs** with the default `ss4o_logs-*` dataset (bootstrapped with `signalType: "logs"` and
+   `schemaMappings` for `traceId`, `spanId`, `message`, and `@timestamp`). Filter by `level`, `service`,
+   `attributes.checkout.scenario`, or `attributes.order.id` using the same field structure covered above.
+
+2. **Explore Metrics (PromQL against the Prometheus Metrics Store)**:
+   Open **Explore → Metrics** and select the `observe_it_prometheus` datasource (linked to the workspace via the
+   `observe-it-prometheus` `data-connection`) to run live PromQL queries against the **Prometheus Metrics Store** (also
+   directly inspectable at `http://localhost:9090`).
+   Every OTLP series carries promoted `service_name`, `service_version`, and `deployment_environment_name` labels,
+   while Data Prepper's `span_derived` RED metrics expose `service`, `operation`, and `namespace="span_derived"`:
+
+   ```text
+   # Total Orders created per currency (Observed App OTLP counter)
+   orders_created_total{service_name="observed-app", deployment_environment_name="local"}
+
+   # Checkout Scenario executions by scenario and final Order State (Traffic Generator)
+   traffic_scenarios_executed_total{service_name="traffic-generator"}
+
+   # HTTP server request rate across both services (excluding /actuator/health)
+   sum by (service_name) (rate(http_server_request_duration_seconds_count[5m]))
+
+   # MongoDB client operation rate by operation (excluding hello/isMaster/listDatabases)
+   sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count{service_name="observed-app"}[5m]))
+
+   # APM span-derived request, error, and 5xx fault counts over 15 minutes
+   sum by (service) (sum_over_time(request{namespace="span_derived"}[15m]))
+   sum by (service) (sum_over_time(fault{namespace="span_derived"}[15m]))
+
+   # APM span-derived p95 latency in seconds by service
+   histogram_quantile(0.95, sum by (service, le) (sum_over_time(latency_seconds_bucket{namespace="span_derived"}[15m])))
+   ```
+
+3. **Explore Traces & One-Click Traces → Logs Correlation**:
+   Open **Explore → Traces** and select the `otel-v1-apm-span-*` (**APM Span Index**) dataset. Click any trace to open
+   the interactive span waterfall spanning `traffic-generator`, `observed-app`, and MongoDB `CLIENT` spans. Because
+   `bootstrap.sh` registers the `trace-to-logs-otel-v1-apm-span` correlation between `otel-v1-apm-span` and
+   `ss4o_logs`, the trace detail drawer displays correlated **SS4O Log Index** records for that `traceId` in one click.
+
+4. **APM Services & Service Map**:
+   Open **APM → Services** and **APM → Application Map** (backed by the `apm-config-observe-it` correlation linking
+   **APM Span Index**, **APM Service Map Index** `otel-v2-apm-service-map*`, and `observe-it-prometheus`):
+   - The **Service Map** renders the live edge from `traffic-generator` → `observed-app` and the synthesized `database`
+     dependency node `mongodb:mongodb` (enabled by `dependency_nodes.enabled: true` in Data Prepper).
+   - Trigger `PAYMENT_GATEWAY_TIMEOUT` (`curl -s -X POST http://localhost:8081/api/traffic/trigger/PAYMENT_GATEWAY_TIMEOUT`)
+     and watch the **Fault** KPI (`fault{namespace="span_derived"}`) and error traces spike on `observed-app`, then
+     drill from the failing operation straight into the span waterfall and correlated `ERROR` stack trace log.

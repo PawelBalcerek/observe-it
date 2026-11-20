@@ -171,22 +171,26 @@ To preserve full sanitized multi-item **Order** BSON commands,
 [`docker/opensearch/traces-index-template.json`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/traces-index-template.json)
 maps `attributes.db.query.text` as `keyword` with `ignore_above: 8192`.
 
-## SS4O Trace Indexing, Ingest Normalization & Cross-Signal Correlation
+## Trace Fan-Out, SS4O Normalization & APM Service Map Ingestion
 
 Routing OTLP spans from an OpenTelemetry Collector into an OpenSearch cluster using `ss4o` mode stores all three
-telemetry signals—logs, metrics, and traces—under a unified Simple Schema for Observability naming convention.
-However, raw SS4O span documents carry `startTime` and `endTime` (`date_nanos`) without a top-level `@timestamp` or
-precomputed duration fields, and nest service metadata under `resource['service.name']`. Normalizing spans at ingest
-time makes trace documents queryable alongside logs and metrics:
+telemetry signals—logs, metrics, and traces—under a unified Simple Schema for Observability naming convention. When a
+platform also runs an APM engine (such as OpenSearch Data Prepper) for service-map topology synthesis, trace-group
+enrichment, and span-derived RED metrics, the Collector can fan filtered spans out to both destinations in parallel:
 
 ```mermaid
 flowchart LR
-    App["JVM Service (OTel Java Agent)"] -->|"OTLP gRPC :4317"| Col["OTel Collector (traces pipeline)"]
+    App["JVM Service (OTel Java Agent)"] -->|"OTLP gRPC :4317"| Col["OTel Collector (trace fan-out)"]
     Col -->|"ss4o opensearch exporter"| Pipe["OpenSearch Ingest Pipeline"]
-    Pipe -->|"normalized timestamp, duration, service"| Idx["Trace Index (ss4o_traces-*)"]
+    Pipe -->|"normalized timestamp, duration, service"| Idx["SS4O Trace Index (ss4o_traces-*)"]
+    Col -->|"OTLP gRPC :21890"| DP["Data Prepper (otel_traces + service_map)"]
+    DP -->|"APM spans & topology"| ApmIdx["APM Span & Service Map Indices"]
+    DP -->|"RED metrics remote write"| Prom["Prometheus Time-Series Store"]
 ```
 
-Specifically, an ingest pipeline and index template for SS4O traces should:
+On the SS4O branch, raw span documents carry `startTime` and `endTime` (`date_nanos`) without a top-level `@timestamp`
+or precomputed duration fields, and nest service metadata under `resource['service.name']`. Normalizing SS4O spans at
+ingest time makes trace documents queryable alongside logs and metrics:
 
 1. **Populate a unified timestamp and precomputed duration**: Derive a top-level `@timestamp` from the span start
    time and precompute numeric duration fields in nanoseconds and milliseconds so time-picker filtering and latency
@@ -203,6 +207,8 @@ Specifically, an ingest pipeline and index template for SS4O traces should:
 - [OpenSearch Simple Schema for Observability (SS4O) Traces](https://docs.opensearch.org/latest/observing-your-data/ss4o/)
   — Standard SS4O trace span document fields (`traceId`, `spanId`, `parentSpanId`, `startTime`, `endTime`, `kind`,
   `status`, `events`).
+- [OpenSearch Data Prepper Trace Analytics & APM](https://docs.opensearch.org/latest/data-prepper/pipelines/configuration/processors/otel-traces/)
+  — `otel_traces` span enrichment and `otel_apm_service_map` topology and RED metric generation.
 - [OpenTelemetry Collector Contrib: OpenSearch Exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/opensearchdriver)
   — Collector `ss4o` mapping mode for exporting OTLP logs, metrics, and traces into `ss4o_*` indices.
 
@@ -211,8 +217,19 @@ Specifically, an ingest pipeline and index template for SS4O traces should:
 [`docker-compose.yml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker-compose.yml) enables OTLP trace
 export on both services (`OTEL_TRACES_EXPORTER=otlp`, `OTEL_BSP_SCHEDULE_DELAY=1000`), and
 [`docker/otel-collector/config.yaml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/otel-collector/config.yaml)
-routes spans through `service.pipelines.traces` (`otlp` → `memory_limiter` → `filter/traces` → `batch` → `opensearch`
-in `ss4o` mode, `dataset: observe-it`, `namespace: local`).
+fans filtered spans out across two isolated pipelines:
+
+- **`traces/opensearch`**: `otlp` → `memory_limiter` → `filter/traces` → `batch` → `opensearch` (`mapping.mode: ss4o`,
+  `dataset: observe-it`, `namespace: local`) feeding the **SS4O Traces Index** (`ss4o_traces-observe-it-local`) for
+  classic Discover saved searches and `Observe-It Traces Overview` (see
+  [ADR-0009](../adr/0009-ss4o-traces-ingest-normalization-and-dashboards-exploration.md)).
+- **`traces/dataprepper`**: `otlp` → `memory_limiter` → `filter/traces` → `batch` → `otlp/dataprepper`
+  (`data-prepper:21890`) feeding traces-only Data Prepper
+  ([`docker/data-prepper/pipelines.yaml`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/data-prepper/pipelines.yaml)),
+  which populates the **APM Span Index** (`otel-v1-apm-span-*`), the **APM Service Map Index**
+  (`otel-v2-apm-service-map*` with `dependency_nodes.enabled: true` synthesizing the `mongodb` dependency node), and
+  `span_derived` RED metrics in the **Prometheus Metrics Store** (see
+  [ADR-0013](../adr/0013-data-prepper-apm-trace-fanout-and-service-map.md)).
 
 Before the Collector starts,
 [`docker/opensearch/bootstrap.sh`](https://github.com/PawelBalcerek/observe-it/blob/main/docker/opensearch/bootstrap.sh)
@@ -230,8 +247,9 @@ registers:
   `events.attributes.exception.*` for 504 stack traces.
 
 Because `ss4o_logs-*`, `ss4o_metrics-*`, and `ss4o_traces-*` share top-level `service`, `version`, `env`, and
-`attributes.order.id` (alongside `traceId` across logs and traces), you can pivot directly between **SS4O Traces Index**,
-**SS4O Log Index**, and **SS4O Metrics Index** in OpenSearch Dashboards.
+`attributes.order.id`—and `bootstrap.sh` links `otel-v1-apm-span-*` to `ss4o_logs-*` via the
+`trace-to-logs-otel-v1-apm-span` correlation—you can pivot seamlessly across **APM Span Index**, **APM Service Map
+Index**, **SS4O Traces Index**, **SS4O Log Index**, and **SS4O Metrics Index** inside the **Observability Workspace**.
 
 ## In-Memory Trace Verification with SpanCapture
 
