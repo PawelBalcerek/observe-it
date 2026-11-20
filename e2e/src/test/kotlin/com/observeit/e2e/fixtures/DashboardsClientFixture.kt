@@ -10,10 +10,15 @@ class DashboardsClientFixture(
     fun overallStatusState(): String =
         http.getJson("$baseUrl/api/status").path("status").path("overall").path("state").asString("")
 
-    fun findSavedObjects(types: List<String>): Set<String> {
+    fun getWorkspace(workspaceId: String): JsonNode = http.getJson(
+        url = "$baseUrl/api/workspaces/$workspaceId",
+        headers = XSRF_HEADERS,
+    )
+
+    fun findSavedObjects(workspaceId: String, types: List<String>): Set<String> {
         val typeQuery = types.joinToString("&") { "type=$it" }
         val response = http.getJson(
-            url = "$baseUrl/api/saved_objects/_find?per_page=100&$typeQuery",
+            url = "$baseUrl/w/$workspaceId/api/saved_objects/_find?per_page=100&$typeQuery",
             headers = XSRF_HEADERS,
         )
         return response.path("saved_objects")
@@ -22,8 +27,8 @@ class DashboardsClientFixture(
             .toSet()
     }
 
-    fun getSavedObject(type: String, id: String): JsonNode = http.getJson(
-        url = "$baseUrl/api/saved_objects/$type/$id",
+    fun getSavedObject(workspaceId: String, type: String, id: String): JsonNode = http.getJson(
+        url = "$baseUrl/w/$workspaceId/api/saved_objects/$type/$id",
         headers = XSRF_HEADERS,
     )
 

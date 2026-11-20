@@ -1,0 +1,9 @@
+server.host: "0.0.0.0"
+opensearch.hosts: ["http://opensearch:9200"]
+
+workspace.enabled: true
+data_source.enabled: true
+explore.enabled: true
+explore.discoverTraces.enabled: true
+explore.discoverMetrics.enabled: true
+datasetManagement.enabled: true
