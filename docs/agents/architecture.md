@@ -1,9 +1,11 @@
-# Architecture & Packaging Conventions
+# Kotlin/JVM Architecture & Packaging Conventions
+
+Applies to Kotlin/JVM modules (`observed-app/`, `traffic-generator/`, `e2e/`, `build-logic/`, and `*.gradle.kts`).
 
 ## 1. Feature + 3-Subpackage Hexagonal Layout (`api`, `domain`, `infrastructure`)
 
-Organize code inside each service module by **feature package first**, and split each feature into three subpackages
-(`api`, `domain`, `infrastructure`):
+Organize Kotlin code inside each JVM service module by **feature package first**, and split each feature into three
+subpackages (`api`, `domain`, `infrastructure`):
 
 ```text
 <root-package>

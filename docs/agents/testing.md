@@ -1,8 +1,10 @@
-# Testing Conventions
+# Kotlin/JVM Testing Conventions
+
+Applies to Kotlin/JVM modules (`observed-app/`, `traffic-generator/`, and `e2e/`).
 
 ## 1. Test Separation & Source Sets (`test`, `integration`, `testFixtures`)
 
-Each service module configures three test source sets via `conventions.spring`:
+Each Kotlin/JVM service module configures three test source sets via `conventions.spring`:
 
 - **Shared Test Fixtures (`src/testFixtures/kotlin`)**:
   - Enabled via Gradle's `java-test-fixtures` plugin and shared across both unit and integration tests.

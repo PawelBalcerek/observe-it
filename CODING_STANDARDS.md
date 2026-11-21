@@ -1,35 +1,74 @@
 # Coding Standards
 
-Entry point for reviewing a diff against this repo's standards. Read and apply **every rule in every file below**, not a
-sample:
+Path-scoped entry point for reviewing a diff against this repo's standards. Apply the **Always apply** section on every
+review, then apply every stack section whose paths are touched by the diff—reading **every rule in each applicable
+guide**, not a sample.
 
-| Source                                                         | Covers                                                                                                                                                                                                                                         |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/agents/architecture.md`](docs/agents/architecture.md)   | Production code: packaging and dependency direction, cross-cutting context (`MDC`), concurrency, static imports, Kotlin idioms, dead code, latest dependency versions, KDoc sources.                                                           |
-| [`docs/agents/testing.md`](docs/agents/testing.md)             | Tests and fixtures: test levels, ordering, fixtures, assertions, literals and constants.                                                                                                                                                       |
-| [`docs/agents/documentation.md`](docs/agents/documentation.md) | Documentation: `CONTEXT.md` glossary, living guides (General Pattern → External Sources → In Observe-It) vs. MADR ADRs (`Context`, `Decision`, `Considered Options`, `Consequences`), code blocks, Mermaid, and links.                         |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md)                           | Commit, branch, and PR shape.                                                                                                                                                                                                                  |
+## Always apply (repo-wide)
 
-## Enforced by tooling
+| Source                               | Covers                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Issue-first branch, single Conventional Commit, and PR shape.                      |
+| [`CONTEXT.md`](CONTEXT.md)           | Canonical domain glossary terms and _Avoid_ synonyms across code, tests, and docs. |
 
-Skip anything already enforced by `./gradlew check` (Ktlint and Detekt in
-[`config/detekt/detekt.yml`](config/detekt/detekt.yml)) or `make docs-build` (`markdownlint-cli2` in
-[`docs/.markdownlint-cli2.jsonc`](docs/.markdownlint-cli2.jsonc), `mermaid.parse()` syntax validation in
-[`docs/scripts/lint-mermaid.mjs`](docs/scripts/lint-mermaid.mjs), MADR ADR structure validation in
-[`docs/scripts/lint-adr.mjs`](docs/scripts/lint-adr.mjs), `npm test` over `docs/scripts/*.test.mjs`, and
-`vitepress build` dead-link checking).
+**Review-only check:**
 
-## Review-only checks
+- **Versions**: for every dependency, plugin, container image, or GitHub Action added or bumped across Gradle,
+  `pnpm`/`npm`, Dockerfiles, Compose, or `.github/workflows/`, verify it uses the latest compatible stable release from
+  the live registry (or pins the highest compatible release with an explanatory `ignore` entry in
+  `.github/dependabot.yml`).
 
-Run all checks on the diff during review:
+## Kotlin/JVM (`observed-app/`, `traffic-generator/`, `e2e/`, `build-logic/`, `*.gradle.kts`)
 
-- **Callers**: for every declaration and default parameter value the diff adds in `src/main`, grep for a caller in
-  `src/main` that uses the declaration or omits the defaulted parameter (`docs/agents/architecture.md` §6).
-- **Versions**: for every dependency, plugin, container image, or GitHub Action added or bumped in the diff, verify it
-  uses the latest compatible stable release (`docs/agents/architecture.md` §6).
-- **Suppressions**: list every `@Suppress` the diff adds and judge whether the code should change instead
-  (`docs/agents/architecture.md` §5).
-- **Test signal**: for every new test or `Fake*` fixture in the diff, verify it tests application behavior rather than
-  framework annotations, raw storage internals, or single-line SDK wrappers, keeps fakes free of spy/callback hooks, and
-  avoids replaying domain state transitions in persistence adapter tests—even when a ticket's acceptance criteria
-  suggest otherwise (`docs/agents/testing.md` §1, §2).
+- **Guides**: [`docs/agents/architecture.md`](docs/agents/architecture.md), [`docs/agents/testing.md`](docs/agents/testing.md)
+- **Skip (enforced by `./gradlew check`)**: Ktlint formatting and Detekt rules in
+  [`config/detekt/detekt.yml`](config/detekt/detekt.yml).
+- **Review-only checks**:
+  - **Callers**: for every declaration and default parameter value the diff adds in `src/main`, grep for a caller in
+    `src/main` that uses the declaration or omits the defaulted parameter (`docs/agents/architecture.md` §6).
+  - **Suppressions**: list every `@Suppress` the diff adds and judge whether the code should change instead
+    (`docs/agents/architecture.md` §5).
+  - **Test signal**: for every new test or `Fake*` fixture in the diff, verify it tests application behavior rather than
+    framework annotations, raw storage internals, or single-line SDK wrappers, keeps fakes free of spy/callback hooks,
+    and avoids replaying domain state transitions in persistence adapter tests (`docs/agents/testing.md` §1, §2).
+
+## Storefront (`storefront/`)
+
+- **Guide**: [`docs/agents/frontend.md`](docs/agents/frontend.md)
+- **Skip (enforced by `pnpm --dir storefront check`)**: TypeScript compiler checks (`tsconfig.json`), Biome lint and
+  formatting (`biome.json`), and Vitest test execution.
+- **Review-only checks**:
+  - **Dead exports**: for every exported symbol the diff adds in `storefront/src/`, grep for a caller in
+    `storefront/src/` (`docs/agents/frontend.md` §1).
+  - **Suppressions**: list every `biome-ignore`, `@ts-expect-error`, and `@ts-ignore` the diff adds and judge whether
+    the code should change instead (`docs/agents/frontend.md` §4).
+  - **Test signal**: verify tests assert user-visible behavior via Testing Library accessible queries (`getByRole`,
+    `getByLabelText`) and verify telemetry through in-memory OTel exporters rather than internal state or SDK mocks
+    (`docs/agents/frontend.md` §4).
+  - **Unidirectional imports**: verify imports follow `app` → `features` → `components` / `telemetry` / `lib` with zero
+    cross-feature deep imports and all `@opentelemetry/*` imports isolated inside `src/telemetry/`
+    (`docs/agents/frontend.md` §1, §3).
+
+## Browser Traffic Generator (`browser-traffic-generator/`)
+
+- **Guide**: [`docs/agents/browser-traffic.md`](docs/agents/browser-traffic.md)
+- **Skip (enforced by `pnpm --dir browser-traffic-generator check`)**: TypeScript compiler checks (`tsconfig.json`),
+  Biome lint and formatting (`biome.json`), and Vitest test execution.
+- **Review-only checks**:
+  - **Dead exports**: for every exported symbol the diff adds in `browser-traffic-generator/src/`, grep for a caller in
+    `browser-traffic-generator/src/` (`docs/agents/browser-traffic.md` §1).
+  - **Suppressions**: list every `biome-ignore`, `@ts-expect-error`, and `@ts-ignore` the diff adds and judge whether
+    the code should change instead (`docs/agents/browser-traffic.md` §5).
+  - **Test signal**: verify unit tests cover scenario sampling, control API routes, and `BrowserContext`/recycle
+    hygiene with in-memory fakes rather than launching real Chromium (`docs/agents/browser-traffic.md` §5).
+  - **Uninstrumented invariant**: verify zero `@opentelemetry/*` dependencies, imports, or OTLP export paths exist
+    anywhere in `browser-traffic-generator/` (`docs/agents/browser-traffic.md` §2).
+
+## Docs & Markdown (`docs/`, `*.md`)
+
+- **Guide**: [`docs/agents/documentation.md`](docs/agents/documentation.md)
+- **Skip (enforced by `make docs-build`)**: `markdownlint-cli2` in
+  [`docs/.markdownlint-cli2.jsonc`](docs/.markdownlint-cli2.jsonc), `mermaid.parse()` syntax validation in
+  [`docs/scripts/lint-mermaid.mjs`](docs/scripts/lint-mermaid.mjs), MADR ADR structure validation in
+  [`docs/scripts/lint-adr.mjs`](docs/scripts/lint-adr.mjs), `npm test` over `docs/scripts/*.test.mjs`, and
+  `vitepress build` dead-link checking.
