@@ -1,6 +1,6 @@
 # Agent Guidelines
 
-## Agent skills
+## Repo-wide workflow
 
 ### Interactive questioning
 
@@ -8,51 +8,31 @@ Ask clarifying or seam-confirmation questions only during `wayfinder` and `grill
 `grilling`) sessions. During `implement` (including `tdd`), select and proceed with the best-fit seams and defaults
 directly without pausing for confirmation.
 
-### Issue tracker
+### Issue tracker & triage labels
 
-Issues and PRDs live in GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Uses the default five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
-`wontfix`). See `docs/agents/triage-labels.md`.
+Issues and PRDs live in GitHub Issues (`gh` CLI); read [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md)
+before creating or updating issues. Triage uses five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`,
+`ready-for-human`, `wontfix`); see [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
 
 ### Domain docs
 
-Single-context layout (`CONTEXT.md` and `docs/adr/` at the repo root). See `docs/agents/domain.md`.
+Single-context layout (`CONTEXT.md` and `docs/adr/` at the repo root). Use canonical terms from `CONTEXT.md` and read
+relevant ADRs before designing or editing a feature; see [`docs/agents/domain.md`](docs/agents/domain.md).
 
-### Architecture & packaging
+### Git, PRs & code review
 
-Feature packages split into `api`, `domain`, and `infrastructure` subpackages (`api` → `domain` ← `infrastructure`),
-transport-agnostic cross-cutting context, lock-free `java.util.concurrent` state over `synchronized`, DTO naming,
-shared exception handling, static imports, and live registry lookups for latest dependency/tooling versions. Read before
-writing or modifying any production code or build/CI dependency. See `docs/agents/architecture.md`.
+Follow the issue-first ticket lifecycle (`feat/`, `fix/`, or `retro/<ticket-slug>` branch, single Conventional Commit
+amended on review, PR linking `Closes #<n>`) in [`CONTRIBUTING.md`](CONTRIBUTING.md). Reviews check diffs against
+path-scoped [`CODING_STANDARDS.md`](CODING_STANDARDS.md). When adding or bumping any dependency, plugin, container
+image, or GitHub Action across any stack, query the live registry and pin the latest compatible stable release.
 
-### Testing conventions
+## Stack guides & verification
 
-Unit tests (`src/test/kotlin`), black-box integration tests (`src/integration/kotlin`), and shared fixtures
-(`src/testFixtures/kotlin`) using `given` / `when` / `then` / `and` blocks, minimal-override `*Fixtures` with
-self-describing dummy defaults, `LogCapture`, `MetricCapture`, and `*ApiFixture` helpers, fakes over mocks, Kotest
-assertions, and Awaitility. Read before writing or modifying any test or test fixture. See `docs/agents/testing.md`.
+Read the matching guide before editing files in a stack, and run its verification gate before committing:
 
-### Code formatting & static analysis (ktlint & detekt)
-
-Ktlint (`org.jlleitschuh.gradle.ktlint`) and Detekt (`dev.detekt`, configured in `config/detekt/detekt.yml`) are wired
-into `./gradlew check`. Before committing changes to JVM code or build/CI dependencies, run `./gradlew check` and format
-with `./gradlew ktlintFormat` if needed. Reviews check diffs against `CODING_STANDARDS.md`.
-
-### Documentation & Markdown
-
-Role-based `docs/` layout (`docs/index.md`, living `docs/guides/*` following General Pattern → External Sources → In
-Observe-It, append-only atomic `docs/adr/NNNN-*.md`), zero YAML frontmatter, 120-character Markdown line wrapping, code
-block / Mermaid / cross-linking rules, and `CONTEXT.md` glossary adherence. Before committing changes to any `.md` file
-or docs configuration, run `make docs-build` (`markdownlint-cli2`, `mermaid.parse()` syntax linting, and
-`vitepress build`). Read before writing or modifying any documentation or Markdown file. See
-`docs/agents/documentation.md`.
-
-### Git & PR workflow
-
-Issue-first ticket lifecycle (`feat/`, `fix/` or `retro/<ticket-slug>` branch, single `feat: ...` / `fix: ...` /
-`retro: ...` commit amended on review, PR linking `Closes #<n>` / `Resolves #<n>`, PR review discussion and
-reply-and-resolve loop, and retro rules). Read before starting a ticket, committing, opening a PR, handling PR review
-comments, or running a retro. See `CONTRIBUTING.md`.
+| Stack                     | Paths                                                                         | Verification gate                            | Guides                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Kotlin/JVM                | `observed-app/`, `traffic-generator/`, `e2e/`, `build-logic/`, `*.gradle.kts` | `./gradlew check` (`./gradlew ktlintFormat`) | [`docs/agents/architecture.md`](docs/agents/architecture.md), [`docs/agents/testing.md`](docs/agents/testing.md) |
+| Storefront                | `storefront/`                                                                 | `pnpm --dir storefront check`                | [`docs/agents/frontend.md`](docs/agents/frontend.md)                                                             |
+| Browser Traffic Generator | `browser-traffic-generator/`                                                  | `pnpm --dir browser-traffic-generator check` | [`docs/agents/browser-traffic.md`](docs/agents/browser-traffic.md)                                               |
+| Docs & Markdown           | `docs/`, `*.md`                                                               | `make docs-build`                            | [`docs/agents/documentation.md`](docs/agents/documentation.md)                                                   |

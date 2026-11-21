@@ -6,11 +6,11 @@ export default defineConfig({
   description: 'Observability reference system for Kotlin/Spring Boot with OpenTelemetry and OpenSearch',
   base: '/observe-it/',
   cleanUrls: true,
-  srcExclude: ['agents/**'],
+  srcExclude: ['AGENTS.md', 'agents/**'],
   vite: {
     plugins: [
       llmstxt({
-        ignoreFiles: ['agents/**'],
+        ignoreFiles: ['AGENTS.md', 'agents/**'],
         excludeIndexPage: false,
       }),
     ],

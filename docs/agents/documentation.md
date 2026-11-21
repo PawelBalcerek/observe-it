@@ -3,8 +3,8 @@
 ## 1. Role-Based `docs/` Layout
 
 Human-facing documentation lives under `docs/` and is published to GitHub Pages via VitePress (`docs/.vitepress/`).
-Internal AI coding-assistant instructions in `docs/agents/` are excluded from compilation, routing, and local search
-indexing via `srcExclude: ['agents/**']`:
+Internal AI coding-assistant instructions in `docs/AGENTS.md` and `docs/agents/` are excluded from compilation,
+routing, and local search indexing via `srcExclude: ['AGENTS.md', 'agents/**']`:
 
 ```text
 docs/
@@ -18,6 +18,7 @@ docs/
 ├── adr/                     ← Append-only Architecture Decision Records
 │   ├── index.md
 │   └── NNNN-<decision-slug>.md
+├── AGENTS.md                ← Local docs agent shim (excluded from the public VitePress site)
 └── agents/                  ← Agent instructions (excluded from the public VitePress site)
 ```
 
