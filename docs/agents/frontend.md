@@ -27,9 +27,10 @@ Enforce strictly unidirectional imports:
 - **`app` → `features` → `components` / `telemetry` / `lib`**.
 - Keep `components/`, `telemetry/`, and `lib/` free of imports from `features/` or `app/`.
 - Keep features decoupled from one another: avoid cross-feature deep imports (such as importing another feature's
-  internal components or hooks). Share cross-feature data through URL routes, domain types in `src/lib/`, or state
-  lifted into `src/app/`.
+  internal components or hooks). Share cross-feature data through URL routes, domain types and React Context in
+  `src/lib/`, or providers mounted in `src/app/`.
 - Keep every exported symbol used by a caller in `storefront/src/` (no dead exports).
+- Type React function components explicitly with `FC` / `FC<Props>`.
 
 ## 2. Semantic HTML & Accessible Locators
 
@@ -66,6 +67,13 @@ domain-named telemetry helpers:
 
 Colocate `*.test.ts` / `*.test.tsx` tests alongside the feature or module they verify:
 
+- **Explicit `// given`, `// when`, `// then`, `// and` comments**: Structure every `it(...)` test with `// given`,
+  `// when`, `// then`, and optional `// and` blocks (mirroring `docs/agents/testing.md` §5).
+- **Reusable test fixtures (`src/test/`)**: Use minimal-override Object Mothers (`orderFixtures.ts`) and API fetch
+  fixtures (`observedAppApiFixture.ts`) rather than ad-hoc inline `fetch` mocks or repeated payload literals.
+- **Private render, interaction & expectation helpers**: Keep each UI test readable by extracting file-local arrow
+  helpers for rendering (`renderCartPage`), user interactions (`userClicksProceedToPayment`), and domain assertions
+  (`expectOrderState`, `expectAlert`).
 - **Query like a user**: Prefer `getByRole`, `getByLabelText`, `findByText`, and `@testing-library/user-event` over DOM
   structure or CSS class assertions.
 - **Verify behavior, not internals**: Assert rendered outcomes, navigation, API requests/responses, and error handling

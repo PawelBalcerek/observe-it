@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := up
-.PHONY: build up down reset logs verify docs-dev docs-dev-docker docs-build docs-build-docker docs-lint docs-lint-docker
+.PHONY: build up down reset logs verify docs-dev docs-dev-docker docs-build docs-build-docker docs-lint docs-lint-docker storefront-dev storefront-dev-docker storefront-check storefront-check-docker
 
 build:
 	./gradlew bootBuildImage
@@ -36,3 +36,15 @@ docs-lint:
 
 docs-lint-docker:
 	$(MAKE) -C docs lint-docker
+
+storefront-dev:
+	$(MAKE) -C storefront dev
+
+storefront-dev-docker:
+	$(MAKE) -C storefront dev-docker
+
+storefront-check:
+	$(MAKE) -C storefront check
+
+storefront-check-docker:
+	$(MAKE) -C storefront check-docker

@@ -55,3 +55,29 @@ jobs:
 
       - name: Auto-merge Dependabot PRs
         uses: allegro-actions/dependabot-automerge@aeb9c49a533f4cdf535264da664107b0c1841b2e # v1
+
+  storefront:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: storefront/package.json
+          cache: true
+          cache_dependency_path: storefront/pnpm-lock.yaml
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Install Storefront dependencies
+        working-directory: storefront
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Biome, TypeScript, Vitest, and Vite build
+        working-directory: storefront
+        run: pnpm run check

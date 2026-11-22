@@ -9,3 +9,5 @@ wip
 docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+storefront/node_modules/
+storefront/dist/

@@ -1,12 +1,14 @@
 {
   "globs": [
     "../*.md",
+    "../storefront/**/*.md",
     "**/*.md"
   ],
   "ignores": [
     "node_modules/**",
     ".vitepress/**",
-    "../.agents/**"
+    "../.agents/**",
+    "../storefront/node_modules/**"
   ],
   "config": {
     "default": true,
