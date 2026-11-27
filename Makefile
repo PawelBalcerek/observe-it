@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := up
-.PHONY: build up down reset logs verify docs-dev docs-dev-docker docs-build docs-build-docker docs-lint docs-lint-docker storefront-dev storefront-dev-docker storefront-check storefront-check-docker storefront-build-image
+.PHONY: build up down reset logs verify docs-dev docs-dev-docker docs-build docs-build-docker docs-lint docs-lint-docker storefront-dev storefront-dev-docker storefront-check storefront-check-docker storefront-build-image browser-traffic-check browser-traffic-check-docker browser-traffic-build-image
 
 OBSERVE_IT_IMAGE_PREFIX ?= ghcr.io/pawelbalcerek/observe-it
 OBSERVE_IT_IMAGE_TAG ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' build.gradle.kts)
@@ -58,3 +58,12 @@ storefront-build-image:
 		-t observe-it/storefront:$(OBSERVE_IT_IMAGE_TAG) \
 		-t $(OBSERVE_IT_IMAGE_PREFIX)/storefront:$(OBSERVE_IT_IMAGE_TAG) \
 		storefront
+
+browser-traffic-check:
+	$(MAKE) -C browser-traffic-generator check
+
+browser-traffic-check-docker:
+	$(MAKE) -C browser-traffic-generator check-docker
+
+browser-traffic-build-image:
+	$(MAKE) -C browser-traffic-generator build-image
