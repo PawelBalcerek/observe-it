@@ -69,10 +69,10 @@ jobs:
           cache: true
           cache_dependency_path: storefront/pnpm-lock.yaml
 
-      - name: Set up Node.js 24
+      - name: Set up Node.js 26
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
 
       - name: Install Storefront dependencies
         working-directory: storefront

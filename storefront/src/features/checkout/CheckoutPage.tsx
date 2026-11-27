@@ -59,11 +59,16 @@ export const CheckoutPage: FC = () => {
           navigate(`/orders/${activeOrderId}`);
         } catch (error) {
           if (error instanceof ApiError && (error.status === 422 || error.status === 504)) {
-            recordOrderFailureLog(error.status === 504 ? "ERROR" : "WARN", error.detail, {
-              "order.id": activeOrderId,
-              "payment.method": paymentMethod,
-              "http.response.status_code": error.status,
-            });
+            recordOrderFailureLog(
+              error.status === 504 ? "ERROR" : "WARN",
+              error.detail,
+              {
+                "order.id": activeOrderId,
+                "payment.method": paymentMethod,
+                "http.response.status_code": error.status,
+              },
+              error,
+            );
             const navState: OrderNavigationState = { failureDetail: error.detail };
             navigate(`/orders/${activeOrderId}`, { state: navState });
             return;

@@ -9,7 +9,7 @@ dev-docker:
 		-v observe-it-storefront-node-modules:/workspace/storefront/node_modules \
 		-v observe-it-storefront-pnpm-store:/pnpm/store \
 		-w /workspace/storefront \
-		node:24-alpine sh -c "npm install -g pnpm@$(PNPM_VERSION) && pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile && pnpm run dev -- --host 0.0.0.0"
+		node:26-alpine sh -c "npm install -g pnpm@$(PNPM_VERSION) && pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile && pnpm run dev -- --host 0.0.0.0"
 
 check-docker:
 	docker run --rm \
@@ -17,7 +17,7 @@ check-docker:
 		-v observe-it-storefront-node-modules:/workspace/storefront/node_modules \
 		-v observe-it-storefront-pnpm-store:/pnpm/store \
 		-w /workspace/storefront \
-		node:24-alpine sh -c "npm install -g pnpm@$(PNPM_VERSION) && pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile && pnpm run check"
+		node:26-alpine sh -c "npm install -g pnpm@$(PNPM_VERSION) && pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile && pnpm run check"
 
 dev:
 	@if command -v pnpm >/dev/null 2>&1; then \
