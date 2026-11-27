@@ -63,6 +63,19 @@
                   }
                 }
               }
+            },
+            "browser": {
+              "properties": {
+                "platform": { "type": "keyword" },
+                "language": { "type": "keyword" },
+                "brands": { "type": "keyword" },
+                "mobile": { "type": "boolean" }
+              }
+            },
+            "user_agent": {
+              "properties": {
+                "original": { "type": "keyword" }
+              }
             }
           }
         },
@@ -129,6 +142,26 @@
                 "function": { "type": "keyword" },
                 "filepath": { "type": "keyword" },
                 "lineno": { "type": "long" }
+              }
+            },
+            "browser": {
+              "properties": {
+                "web_vital": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "value": { "type": "double" },
+                    "delta": { "type": "double" },
+                    "id": { "type": "keyword" },
+                    "rating": { "type": "keyword" },
+                    "navigation_type": { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "url": {
+              "properties": {
+                "full": { "type": "keyword" },
+                "path": { "type": "keyword" }
               }
             }
           }

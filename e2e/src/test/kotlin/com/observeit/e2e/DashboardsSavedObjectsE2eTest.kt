@@ -6,6 +6,7 @@ import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldBeEmpty
+import io.kotest.matchers.string.shouldContainIgnoringCase
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.JsonNode
@@ -14,7 +15,7 @@ import tools.jackson.module.kotlin.jacksonMapperBuilder
 
 class DashboardsSavedObjectsE2eTest {
     @Test
-    fun `all 34 classic objects, APM datasets, data-connection, and correlations exist in observe-it workspace`() {
+    fun `all classic, Storefront, APM, data-connection, and correlation saved objects exist in observe-it workspace`() {
         // given
         val expectedSavedObjects = listOf(
             "index-pattern:ss4o_logs",
@@ -33,6 +34,9 @@ class DashboardsSavedObjectsE2eTest {
             "search:domain-order-spans",
             "search:error-and-timeout-spans",
             "search:mongodb-client-spans",
+            "search:storefront-web-vitals",
+            "search:storefront-browser-errors-and-logs",
+            "search:storefront-trace-spans",
             "visualization:traffic-scenarios-by-outcome",
             "visualization:traffic-scenario-duration",
             "visualization:order-state-transitions",
@@ -51,8 +55,15 @@ class DashboardsSavedObjectsE2eTest {
             "visualization:error-spans-by-operation",
             "visualization:top-operations-latency-table",
             "visualization:mongodb-span-latency-by-operation",
+            "visualization:storefront-web-vitals-kpi",
+            "visualization:storefront-web-vitals-over-time",
+            "visualization:storefront-web-vitals-rating-breakdown",
+            "visualization:storefront-browser-errors-over-time",
+            "visualization:storefront-browser-errors-by-type",
+            "visualization:storefront-span-latency-by-operation",
             "dashboard:observe-it-metrics-overview",
             "dashboard:observe-it-traces-overview",
+            "dashboard:observe-it-storefront-overview",
             "data-connection:observe-it-prometheus",
             "correlations:trace-to-logs-otel-v1-apm-span",
             "correlations:apm-config-observe-it",
@@ -97,13 +108,15 @@ class DashboardsSavedObjectsE2eTest {
     }
 
     @Test
-    fun `all 4 log saved searches include traceId in columns`() {
+    fun `all 6 log saved searches include traceId in columns`() {
         // given
         val logSearchIds = listOf(
             "all-order-logs",
             "warnings-and-rejections",
             "gateway-timeouts-and-errors",
             "checkout-scenario-explorer",
+            "storefront-web-vitals",
+            "storefront-browser-errors-and-logs",
         )
 
         // when
@@ -117,6 +130,106 @@ class DashboardsSavedObjectsE2eTest {
         assertSoftly {
             hasTraceIdBySearch.forEach { (_, hasTraceId) ->
                 hasTraceId shouldBe true
+            }
+        }
+    }
+
+    @Test
+    fun `ss4o_logs and ss4o_traces index patterns register explicit browser telemetry fields`() {
+        // given
+        val expectedBrowserResourceFields = mapOf(
+            "resource.browser.platform" to "keyword",
+            "resource.browser.language" to "keyword",
+            "resource.browser.brands" to "keyword",
+            "resource.browser.mobile" to "boolean",
+            "resource.user_agent.original" to "keyword",
+        )
+        val expectedLogsBrowserFields = expectedBrowserResourceFields + mapOf(
+            "attributes.browser.web_vital.name" to "keyword",
+            "attributes.browser.web_vital.value" to "double",
+            "attributes.browser.web_vital.delta" to "double",
+            "attributes.browser.web_vital.id" to "keyword",
+            "attributes.browser.web_vital.rating" to "keyword",
+            "attributes.browser.web_vital.navigation_type" to "keyword",
+            "attributes.url.full" to "keyword",
+            "attributes.url.path" to "keyword",
+        )
+
+        // when
+        val logsFieldTypes = indexPatternEsTypes("ss4o_logs")
+        val tracesFieldTypes = indexPatternEsTypes("ss4o_traces")
+
+        // then
+        assertSoftly {
+            expectedLogsBrowserFields.forEach { (fieldName, expectedEsType) ->
+                logsFieldTypes[fieldName] shouldBe expectedEsType
+            }
+            expectedBrowserResourceFields.forEach { (fieldName, expectedEsType) ->
+                tracesFieldTypes[fieldName] shouldBe expectedEsType
+            }
+        }
+    }
+
+    @Test
+    fun `Observe-It Storefront Overview dashboard references all 6 Storefront visualizations`() {
+        // given
+        val expectedDashboardRefs = mapOf(
+            "panel_0" to "visualization:storefront-web-vitals-kpi",
+            "panel_1" to "visualization:storefront-web-vitals-over-time",
+            "panel_2" to "visualization:storefront-web-vitals-rating-breakdown",
+            "panel_3" to "visualization:storefront-browser-errors-over-time",
+            "panel_4" to "visualization:storefront-browser-errors-by-type",
+            "panel_5" to "visualization:storefront-span-latency-by-operation",
+        )
+
+        // when
+        val storefrontDashboard = dashboards.getSavedObject(
+            WORKSPACE_ID,
+            "dashboard",
+            "observe-it-storefront-overview",
+        )
+
+        // then
+        assertSoftly {
+            storefrontDashboard.path("attributes").path("title").asString("") shouldBe "Observe-It Storefront Overview"
+            storefrontDashboard.referenceMap() shouldBe expectedDashboardRefs
+        }
+    }
+
+    @Test
+    fun `Storefront Trace Spans saved search includes durationMs and traceId columns`() {
+        // given
+        val expectedColumns = listOf("durationMs", "traceId")
+
+        // when
+        val storefrontTraceColumns = dashboards.getSavedObject(WORKSPACE_ID, "search", "storefront-trace-spans")
+            .path("attributes").path("columns")
+            .values()
+            .map { it.asString("") }
+
+        // then
+        storefrontTraceColumns shouldContainAll expectedColumns
+    }
+
+    @Test
+    fun `inclusive saved objects mention Storefront in their descriptions`() {
+        // given
+        val inclusiveObjects = listOf(
+            "search" to "all-order-logs",
+            "search" to "all-trace-spans",
+            "dashboard" to "observe-it-traces-overview",
+        )
+
+        // when
+        val descriptions = inclusiveObjects.map { (type, id) ->
+            dashboards.getSavedObject(WORKSPACE_ID, type, id)
+                .path("attributes").path("description").asString("")
+        }
+
+        // then
+        assertSoftly {
+            descriptions.forEach { description ->
+                description shouldContainIgnoringCase "storefront"
             }
         }
     }
@@ -220,6 +333,14 @@ class DashboardsSavedObjectsE2eTest {
                 "entities[1].index" to "index-pattern:otel-v2-apm-service-map",
                 "entities[2].dataConnection" to "data-connection:observe-it-prometheus",
             )
+        }
+    }
+
+    private fun indexPatternEsTypes(patternId: String): Map<String, String> {
+        val fieldsRaw = dashboards.getSavedObject(WORKSPACE_ID, "index-pattern", patternId)
+            .path("attributes").path("fields").asString("[]")
+        return MAPPER.readTree(fieldsRaw).values().associate { field ->
+            field.path("name").asString("") to field.path("esTypes").path(0).asString("")
         }
     }
 
