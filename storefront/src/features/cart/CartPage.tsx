@@ -46,10 +46,15 @@ export const CartPage: FC = () => {
           navigate(`/checkout/${created.orderId}`);
         } catch (error) {
           if (error instanceof ApiError && error.status === 422) {
-            recordOrderFailureLog("WARN", error.detail, {
-              "order.id": created.orderId,
-              "http.response.status_code": error.status,
-            });
+            recordOrderFailureLog(
+              "WARN",
+              error.detail,
+              {
+                "order.id": created.orderId,
+                "http.response.status_code": error.status,
+              },
+              error,
+            );
             clearCart();
             const navState: OrderNavigationState = { failureDetail: error.detail };
             navigate(`/orders/${created.orderId}`, { state: navState });

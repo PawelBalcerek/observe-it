@@ -1,5 +1,8 @@
 .DEFAULT_GOAL := up
-.PHONY: build up down reset logs verify docs-dev docs-dev-docker docs-build docs-build-docker docs-lint docs-lint-docker storefront-dev storefront-dev-docker storefront-check storefront-check-docker
+.PHONY: build up down reset logs verify docs-dev docs-dev-docker docs-build docs-build-docker docs-lint docs-lint-docker storefront-dev storefront-dev-docker storefront-check storefront-check-docker storefront-build-image
+
+OBSERVE_IT_IMAGE_PREFIX ?= ghcr.io/pawelbalcerek/observe-it
+OBSERVE_IT_IMAGE_TAG ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' build.gradle.kts)
 
 build:
 	./gradlew bootBuildImage
@@ -48,3 +51,10 @@ storefront-check:
 
 storefront-check-docker:
 	$(MAKE) -C storefront check-docker
+
+storefront-build-image:
+	docker build \
+		--build-arg VITE_APP_VERSION=$(OBSERVE_IT_IMAGE_TAG) \
+		-t observe-it/storefront:$(OBSERVE_IT_IMAGE_TAG) \
+		-t $(OBSERVE_IT_IMAGE_PREFIX)/storefront:$(OBSERVE_IT_IMAGE_TAG) \
+		storefront

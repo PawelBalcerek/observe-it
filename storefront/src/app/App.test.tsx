@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { OrderState } from "../lib/types.ts";
+import { silenceConsoleError } from "../test/consoleFixture.ts";
 import { stubObservedAppApi } from "../test/observedAppApiFixture.ts";
 import { AppRoutes } from "./AppRoutes.tsx";
 
@@ -90,7 +91,7 @@ describe("Storefront SPA end-to-end journeys", () => {
 
   it("navigates to /diagnostics via footer link, catches render error in Error Boundary, and recovers on Reset", async () => {
     // given
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    silenceConsoleError();
     const user = renderApp();
 
     // when
@@ -107,6 +108,5 @@ describe("Storefront SPA end-to-end journeys", () => {
 
     // then
     await expectHeading(/browser diagnostics/i);
-    consoleErrorSpy.mockRestore();
   });
 });
