@@ -11,3 +11,5 @@ docs/.vitepress/dist/
 docs/.vitepress/cache/
 storefront/node_modules/
 storefront/dist/
+browser-traffic-generator/node_modules/
+browser-traffic-generator/dist/

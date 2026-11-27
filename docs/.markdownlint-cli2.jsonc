@@ -2,13 +2,15 @@
   "globs": [
     "../*.md",
     "../storefront/**/*.md",
+    "../browser-traffic-generator/**/*.md",
     "**/*.md"
   ],
   "ignores": [
     "node_modules/**",
     ".vitepress/**",
     "../.agents/**",
-    "../storefront/node_modules/**"
+    "../storefront/node_modules/**",
+    "../browser-traffic-generator/node_modules/**"
   ],
   "config": {
     "default": true,
