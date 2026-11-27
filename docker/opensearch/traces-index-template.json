@@ -136,6 +136,19 @@
                   }
                 }
               }
+            },
+            "browser": {
+              "properties": {
+                "platform": { "type": "keyword" },
+                "language": { "type": "keyword" },
+                "brands": { "type": "keyword" },
+                "mobile": { "type": "boolean" }
+              }
+            },
+            "user_agent": {
+              "properties": {
+                "original": { "type": "keyword" }
+              }
             }
           }
         },
