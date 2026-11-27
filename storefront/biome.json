@@ -43,6 +43,104 @@
   },
   "overrides": [
     {
+      "includes": ["src/main.tsx", "src/app/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@opentelemetry/*", "web-vitals"],
+                    "message": "Isolate OpenTelemetry and web-vitals imports inside src/telemetry/."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@opentelemetry/*", "web-vitals"],
+                    "message": "Isolate OpenTelemetry and web-vitals imports inside src/telemetry/."
+                  },
+                  {
+                    "group": ["**/app/**", "**/app"],
+                    "message": "Keep features/ free of imports from app/ (unidirectional: app -> features -> components/telemetry/lib)."
+                  },
+                  {
+                    "group": [
+                      "../catalog/**",
+                      "../cart/**",
+                      "../checkout/**",
+                      "../orders/**",
+                      "../diagnostics/**"
+                    ],
+                    "message": "Avoid cross-feature deep imports; share cross-feature state via URL routes, src/lib/, or providers in src/app/."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/components/**", "src/lib/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@opentelemetry/*", "web-vitals"],
+                    "message": "Isolate OpenTelemetry and web-vitals imports inside src/telemetry/."
+                  },
+                  {
+                    "group": ["**/features/**", "**/features", "**/app/**", "**/app"],
+                    "message": "Keep components/ and lib/ free of imports from features/ or app/."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/telemetry/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/features/**", "**/features", "**/app/**", "**/app"],
+                    "message": "Keep telemetry/ free of imports from features/ or app/."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/*.test.tsx"],
       "linter": {
         "rules": {

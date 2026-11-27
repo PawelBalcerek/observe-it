@@ -2,8 +2,9 @@
 
 Applies to `browser-traffic-generator/` (standalone Node.js, TypeScript, `playwright-core`, Biome, and Vitest).
 Compiler strictness, lint rules, and formatting live in `browser-traffic-generator/tsconfig.json` and
-`browser-traffic-generator/biome.json`; run `pnpm --dir browser-traffic-generator check` to verify types, linting,
-formatting, and unit tests before committing.
+`browser-traffic-generator/biome.json` (mirror `storefront/biome.json`'s function-style and explicit-type rules when
+scaffolding); run `pnpm --dir browser-traffic-generator check` to verify types, linting, formatting, and unit tests
+before committing.
 
 ## 1. Standalone Package Layout
 
@@ -54,7 +55,11 @@ Expose a lightweight server using Node's built-in `http` module on port `8082` (
 
 ## 5. Testing Conventions
 
-- Keep unit tests fast and deterministic under Vitest: test scenario weight sampling, control API HTTP routes, header
-  attachment wiring, and `BrowserContext` cleanup / periodic `Browser` recycle logic using in-memory fakes rather than
-  launching real Chromium binaries in unit tests.
+- **Explicit `// given`, `// when`, `// then`, `// and` comments**: Structure every `it(...)` test with `// given`,
+  `// when`, `// then`, and optional `// and` blocks.
+- **Reusable test fixtures**: Extract Object Mother factories and HTTP/Playwright fakes into shared test fixtures
+  rather than repeating inline mocks or payload literals.
+- Keep unit tests fast and deterministic under Vitest: assert implemented behavior (skip negative "never does X"
+  checks), covering scenario weight sampling, control API HTTP routes, header attachment wiring, and `BrowserContext`
+  cleanup / periodic `Browser` recycle logic using in-memory fakes rather than launching real Chromium binaries.
 - Fix the underlying type or lint issue before reaching for `biome-ignore`, `@ts-expect-error`, or `@ts-ignore`.

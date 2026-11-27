@@ -1,10 +1,11 @@
 # Storefront Frontend Conventions
 
-Applies to `storefront/` (React, Vite, TypeScript, Tailwind CSS, Biome, and Vitest). Compiler strictness, lint rules,
-and formatting live in `storefront/tsconfig.json` and `storefront/biome.json`; run `pnpm --dir storefront check` to
-verify types, linting, formatting, and unit tests before committing.
+Applies to `storefront/` (React, Vite, TypeScript, Tailwind CSS, Biome, and Vitest). Compiler strictness, lint rules
+(including unidirectional imports and telemetry isolation), formatting, and dead-export checks live in
+`storefront/tsconfig.json`, `storefront/biome.json`, and `storefront/package.json`; run `pnpm --dir storefront check`
+before committing.
 
-## 1. Feature-Based Architecture & Unidirectional Imports
+## 1. Feature-Based Architecture & State Sharing
 
 Organize `storefront/src/` using a Feature-Based ("Bulletproof React") layout:
 
@@ -22,14 +23,8 @@ storefront/src/
 └── lib/          ← Shared API fetch client, formatting helpers, domain types
 ```
 
-Enforce strictly unidirectional imports:
-
-- **`app` → `features` → `components` / `telemetry` / `lib`**.
-- Keep `components/`, `telemetry/`, and `lib/` free of imports from `features/` or `app/`.
-- Keep features decoupled from one another: avoid cross-feature deep imports (such as importing another feature's
-  internal components or hooks). Share cross-feature data through URL routes, domain types and React Context in
-  `src/lib/`, or providers mounted in `src/app/`.
-- Keep every exported symbol used by a caller in `storefront/src/` (no dead exports).
+- Share cross-feature data through URL routes, domain types and React Context in `src/lib/`, or providers mounted in
+  `src/app/` rather than prop-drilling across routes.
 - Type React function components explicitly with `FC` / `FC<Props>`.
 
 ## 2. Semantic HTML & Accessible Locators
@@ -76,8 +71,9 @@ Colocate `*.test.ts` / `*.test.tsx` tests alongside the feature or module they v
   (`expectOrderState`, `expectAlert`).
 - **Query like a user**: Prefer `getByRole`, `getByLabelText`, `findByText`, and `@testing-library/user-event` over DOM
   structure or CSS class assertions.
-- **Verify behavior, not internals**: Assert rendered outcomes, navigation, API requests/responses, and error handling
-  rather than internal React state or implementation details.
+- **Verify implemented behavior, not internals**: Assert rendered outcomes, navigation, API requests/responses, and
+  error handling rather than internal React state, implementation details, or the absence of unimplemented behavior
+  (such as negative "never does X" checks).
 - **In-memory telemetry assertions**: Verify custom spans, error capture, and `browser.web_vital` log records with
   OpenTelemetry in-memory exporters (`InMemorySpanExporter`, `InMemoryLogRecordExporter`) rather than mocking SDK
   internals.

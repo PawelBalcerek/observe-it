@@ -29,9 +29,8 @@ Each Kotlin/JVM service module configures three test source sets via `convention
   - **HTTP endpoint integration tests**: Verify the wired HTTP contract (including request validation `ProblemDetail`
     responses) and emitted telemetry as a **black box** strictly through `*ApiFixture` / `RestTestClient`, `LogCapture`,
     `MetricCapture`, and `SpanCapture`. Keep each test scoped to its feature's endpoints, reset mutable state in
-    `@BeforeEach` / `@AfterEach` or assert against baseline deltas instead of `@DirtiesContext` (enforced by Detekt
-    `ForbiddenAnnotation`), and test cross-cutting servlet filters once in dedicated filter/health tests rather than
-    re-testing filter cleanup across every endpoint test.
+    `@BeforeEach` / `@AfterEach` or assert against baseline deltas, and test cross-cutting servlet filters once in
+    dedicated filter/health tests rather than re-testing filter cleanup across every endpoint test.
   - **Ascending HTTP status order**: Within each endpoint integration test class, order test methods by ascending HTTP
     response status (`2xx` → `4xx` → `5xx`, e.g., `200`/`201` → `400` → `404` → `409` → `422` → `504`).
   - **Persistence adapter tests**: Verify the repository port contract (`save`, `findById`, missing-ID behavior,
@@ -47,9 +46,9 @@ Each Kotlin/JVM service module configures three test source sets via `convention
   together inside the same `@Test` methods. When a service is already exercised directly by an integration test, skip a
   duplicate unit test for it. Test application behavior, not framework or SDK wiring: skip tests that only restate a
   declaration (enum entries, constant tables), inspect raw driver/storage internals or framework metadata to re-verify
-  declarative annotations (`@Field`, `@Indexed`), or verify single-line SDK wrappers
-  (`InstrumentationUtil.suppressInstrumentation`); test the invariant a declaration encodes (e.g., scenario weights sum
-  to 1) where the code relying on it lives.
+  declarative annotations (`@Field`, `@Indexed`), verify single-line SDK wrappers
+  (`InstrumentationUtil.suppressInstrumentation`), or assert the absence of unimplemented behavior ("never does X");
+  test the invariant a declaration encodes (e.g., scenario weights sum to 1) where the code relying on it lives.
 
 - **End-to-End Verification (`e2e/src/test/kotlin`)**:
   - Standalone `:e2e` Gradle subproject (`conventions.kotlin`, zero project dependencies on `:observed-app` or

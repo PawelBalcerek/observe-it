@@ -83,8 +83,7 @@ Dependencies point strictly inward toward `domain` (`api` → `domain` ← `infr
      and external I/O behind the `domain` port interface.
    - **Non-blocking delays & monotonic elapsed time**: Schedule artificial or simulated delays with
      `CompletableFuture.delayedExecutor(delayMs, MILLISECONDS)` and measure elapsed duration with
-     `kotlin.time.measureTime` (`TimeSource.Monotonic`), never `Thread.sleep` or wall-clock `System.currentTimeMillis()`
-     (enforced by Detekt `ForbiddenMethodCall`).
+     `kotlin.time.measureTime` (`TimeSource.Monotonic`).
 
 ## 2. Cross-Cutting Concerns
 
@@ -129,8 +128,6 @@ Keep the qualifier where it carries meaning the bare name loses:
 
 ## 5. Kotlin Idioms & Visibility
 
-- **Exhaustive `when` expressions**: Branch on enums and sealed types with an exhaustive `when` listing every entry
-  explicitly and without an `else` branch (enforced by Detekt `ElseCaseInsteadOfExhaustiveWhen`).
 - **`when` over `if` / `else if` chains**: Branch on a single subject (status code, type, enum) with a `when`
   expression.
 - **`private companion object` by default**: Mark every `companion object` holding class-internal constants

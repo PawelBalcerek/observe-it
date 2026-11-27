@@ -29,25 +29,26 @@ guide**, not a sample.
   - **Suppressions**: list every `@Suppress` the diff adds and judge whether the code should change instead
     (`docs/agents/architecture.md` §5).
   - **Test signal**: for every new test or `Fake*` fixture in the diff, verify it tests application behavior rather than
-    framework annotations, raw storage internals, or single-line SDK wrappers, keeps fakes free of spy/callback hooks,
-    and avoids replaying domain state transitions in persistence adapter tests (`docs/agents/testing.md` §1, §2).
+    framework annotations, raw storage internals, single-line SDK wrappers, or the absence of unimplemented behavior,
+    keeps fakes free of spy/callback hooks, and avoids replaying domain state transitions in persistence adapter tests
+    (`docs/agents/testing.md` §1, §2).
 
 ## Storefront (`storefront/`)
 
 - **Guide**: [`docs/agents/frontend.md`](docs/agents/frontend.md)
-- **Skip (enforced by `pnpm --dir storefront check`)**: TypeScript compiler checks (`tsconfig.json`), Biome lint and
-  formatting (`biome.json`), and Vitest test execution.
+- **Skip (enforced by `pnpm --dir storefront check`)**: TypeScript compiler checks (`tsconfig.json`), Biome lint
+  (including unidirectional imports and `@opentelemetry/*` / `web-vitals` isolation in `src/telemetry/`) and formatting
+  (`biome.json`), Knip dead-export and unused-file checks (`knip`), and Vitest test execution.
 - **Review-only checks**:
-  - **Dead exports**: for every exported symbol the diff adds in `storefront/src/`, grep for a caller in
-    `storefront/src/` (`docs/agents/frontend.md` §1).
   - **Suppressions**: list every `biome-ignore`, `@ts-expect-error`, and `@ts-ignore` the diff adds and judge whether
     the code should change instead (`docs/agents/frontend.md` §4).
-  - **Test signal**: verify tests assert user-visible behavior via Testing Library accessible queries (`getByRole`,
-    `getByLabelText`) and verify telemetry through in-memory OTel exporters rather than internal state or SDK mocks
-    (`docs/agents/frontend.md` §4).
-  - **Unidirectional imports**: verify imports follow `app` → `features` → `components` / `telemetry` / `lib` with zero
-    cross-feature deep imports and all `@opentelemetry/*` imports isolated inside `src/telemetry/`
-    (`docs/agents/frontend.md` §1, §3).
+  - **Component typing & state**: verify React function components are explicitly typed with `FC` / `FC<Props>` and
+    cross-feature state is shared via React Context (`src/lib/` + `src/app/`) rather than prop-drilling
+    (`docs/agents/frontend.md` §1).
+  - **Test signal**: verify tests use `// given` / `// when` / `// then` structure, reuse `src/test/` fixtures
+    (`orderFixtures`, `observedAppApiFixture`) and file-local `render*` / `user*` / `expect*` helpers, assert
+    user-visible behavior via Testing Library accessible queries (`getByRole`, `getByLabelText`) and in-memory OTel
+    exporters rather than internal state, SDK mocks, or negative "never does X" checks (`docs/agents/frontend.md` §4).
 
 ## Browser Traffic Generator (`browser-traffic-generator/`)
 
@@ -59,8 +60,10 @@ guide**, not a sample.
     `browser-traffic-generator/src/` (`docs/agents/browser-traffic.md` §1).
   - **Suppressions**: list every `biome-ignore`, `@ts-expect-error`, and `@ts-ignore` the diff adds and judge whether
     the code should change instead (`docs/agents/browser-traffic.md` §5).
-  - **Test signal**: verify unit tests cover scenario sampling, control API routes, and `BrowserContext`/recycle
-    hygiene with in-memory fakes rather than launching real Chromium (`docs/agents/browser-traffic.md` §5).
+  - **Test signal**: verify unit tests use `// given` / `// when` / `// then` structure and reusable fixtures, assert
+    implemented behavior rather than negative "never does X" checks, and cover scenario sampling, control API routes,
+    and `BrowserContext`/recycle hygiene with in-memory fakes rather than launching real Chromium
+    (`docs/agents/browser-traffic.md` §5).
   - **Uninstrumented invariant**: verify zero `@opentelemetry/*` dependencies, imports, or OTLP export paths exist
     anywhere in `browser-traffic-generator/` (`docs/agents/browser-traffic.md` §2).
 
@@ -72,3 +75,6 @@ guide**, not a sample.
   [`docs/scripts/lint-mermaid.mjs`](docs/scripts/lint-mermaid.mjs), MADR ADR structure validation in
   [`docs/scripts/lint-adr.mjs`](docs/scripts/lint-adr.mjs), `npm test` over `docs/scripts/*.test.mjs`, and
   `vitepress build` dead-link checking.
+- **Review-only checks**:
+  - **No linter restatements**: flag any rule added to `AGENTS.md` or `docs/agents/*.md` that is already enforced by a
+    configured linter, compiler, or check script; keep tool configs as the single source of truth.

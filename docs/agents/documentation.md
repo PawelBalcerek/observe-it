@@ -64,7 +64,7 @@ and **Result of a real trade-off**):
 - **Immutable once accepted**: Keep accepted ADR bodies intact when a decision changes. Reversing or replacing a
   decision creates a new ADR (`docs/adr/MMMM-*.md`) and updates the prior ADR's status header and superseding banner.
 - **Active ADR template (`Accepted`, MADR-style)**: Include all four H2 sections in order (`## Context`, `## Decision`,
-  `## Considered Options`, `## Consequences`), enforced by `docs/scripts/lint-adr.mjs` during `make docs-build`:
+  `## Considered Options`, `## Consequences`):
   - In `## Considered Options`, explicitly state for each option whether it was **rejected** (ruled out due to a
     fundamental architectural or ergonomic mismatch) or **deferred** / **postponed** (not chosen for the current
     milestone scope, open to a future ADR).
@@ -121,19 +121,11 @@ line or `## Context` section.
 - **Zero YAML frontmatter**: Author `README.md`, `docs/index.md`, `docs/guides/*.md`, and `docs/adr/*.md` as pure
   Markdown without YAML frontmatter so files render cleanly in GitHub's native file viewer and VitePress infers page
   titles from the `# H1` heading.
-- **Heading hierarchy**: Start every document with a single `# H1` title (`MD025`), followed by hierarchical `## H2` and
-  `### H3` sections without skipping levels (`MD001`, matching VitePress `outline: [2, 3]`). In narrative guides
-  (`docs/guides/*.md`, excluding `docs/guides/index.md`), open the first section with an explicit `## H2` heading
-  immediately after `# H1`, and mark the progression steps inside each `## H2` section with
-  `### External Sources & Ecosystem Practice` and `### In Observe-It` H3 subheadings rather than bold inline labels so
-  every section and subsection is indexed in the VitePress table of contents.
-- **120-character line wrapping & aligned tables**: Wrap prose paragraphs, blockquotes, and list items at 120 characters
-  (`MD013` in `docs/.markdownlint-cli2.jsonc`, matching `.editorconfig`). Markdown tables (`tables: false`), fenced code
-  blocks (`code_blocks: false`), headings (`headings: false`), and unbreakable inline URLs (`strict: false`) are exempt
-  from line wrapping, and all Markdown tables must use vertically aligned column pipes (`MD060` with `style: "aligned"`).
+- **Heading hierarchy**: In narrative guides (`docs/guides/*.md`, excluding `docs/guides/index.md`), open the first
+  section with an explicit `## H2` heading immediately after `# H1`, and mark the progression steps inside each `## H2`
+  section with `### External Sources & Ecosystem Practice` and `### In Observe-It` H3 subheadings rather than bold
+  inline labels so every section and subsection is indexed in the VitePress table of contents (`outline: [2, 3]`).
 - **Fenced code blocks**:
-  - Declare a language identifier on every fenced code block (`kotlin`, `bash`, `yaml`, `json`, `text`, `mermaid`,
-    `http`, `markdown`), enforced by `MD040`, and surround fences with blank lines (`MD031`).
   - Write runnable `bash` commands without `$` shell prompt prefixes so commands can be copy-pasted directly.
   - Pair concise, focused code or config excerpts with a link to the full source file rather than pasting entire classes
     or configuration files into guides.
