@@ -1,6 +1,6 @@
 services:
   opensearch:
-    image: opensearchproject/opensearch:3.9.0
+    image: opensearchproject/opensearch:3.10.1
     container_name: opensearch
     environment:
       - cluster.name=observe-it-cluster
@@ -50,7 +50,7 @@ services:
       - observe-it-net
 
   opensearch-bootstrap:
-    image: opensearchproject/opensearch:3.9.0
+    image: opensearchproject/opensearch:3.10.1
     container_name: opensearch-bootstrap
     restart: "no"
     entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
