@@ -117,7 +117,7 @@ services:
       - observe-it-net
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.164.0
+    image: otel/opentelemetry-collector-contrib:0.166.0
     container_name: otel-collector
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
