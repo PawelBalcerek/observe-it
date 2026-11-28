@@ -92,7 +92,7 @@ services:
       - observe-it-net
 
   data-prepper:
-    image: opensearchproject/data-prepper:2.17.0
+    image: opensearchproject/data-prepper:2.17.1
     container_name: data-prepper
     environment:
       - "JAVA_OPTS=-Xms256m -Xmx384m"
@@ -101,6 +101,8 @@ services:
       - ./docker/data-prepper/pipelines.yaml:/usr/share/data-prepper/pipelines/pipelines.yaml:ro
       - ./docker/data-prepper/data-prepper-config.yaml:/usr/share/data-prepper/config/data-prepper-config.yaml:ro
     depends_on:
+      opensearch-bootstrap:
+        condition: service_completed_successfully
       opensearch:
         condition: service_healthy
       prometheus:

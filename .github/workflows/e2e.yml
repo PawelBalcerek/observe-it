@@ -52,6 +52,12 @@ jobs:
         with:
           report_paths: '**/test-results/*/*.xml'
 
+      - name: Dump container diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --tail=100 data-prepper opensearch otel-collector
+
       - name: Teardown Docker Compose topology
         if: always()
         run: docker compose down -v
