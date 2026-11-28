@@ -49,6 +49,15 @@ curl -fsS -X PUT "http://opensearch:9200/_index_template/observe-it-ss4o-traces"
 echo ""
 echo "==> Traces index template registered."
 
+echo "==> Initializing OpenSearch ISM config index (.opendistro-ism-config)..."
+if [ "$(curl -s -o /dev/null -w "%{http_code}" "http://opensearch:9200/.opendistro-ism-config" || true)" != "200" ]; then
+  curl -fsS -X PUT "http://opensearch:9200/_plugins/_ism/policies/observe-it-ism-init" \
+    -H "Content-Type: application/json" \
+    -d '{"policy":{"description":"Initialize ISM config index before Data Prepper starts","default_state":"init","states":[{"name":"init","actions":[],"transitions":[]}]}}' >/dev/null
+  curl -fsS -X DELETE "http://opensearch:9200/_plugins/_ism/policies/observe-it-ism-init" >/dev/null
+fi
+echo "==> OpenSearch ISM config index initialized."
+
 echo "==> Upserting OpenSearch SQL Prometheus datasource: observe_it_prometheus..."
 PROMETHEUS_DATASOURCE_PAYLOAD='{
   "name": "observe_it_prometheus",
