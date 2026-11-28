@@ -7,6 +7,23 @@ import type {
   ShippingMethod,
 } from "./types.ts";
 
+const HTTP_METHOD = {
+  GET: "GET",
+  POST: "POST",
+} as const;
+
+const HTTP_HEADER = {
+  CONTENT_TYPE: "Content-Type",
+} as const;
+
+const CONTENT_TYPE_JSON = "application/json";
+const ORDERS_BASE_PATH = "/api/orders";
+
+const orderPath = (orderId: string, action?: string): string => {
+  const encodedId = encodeURIComponent(orderId);
+  return action ? `${ORDERS_BASE_PATH}/${encodedId}/${action}` : `${ORDERS_BASE_PATH}/${encodedId}`;
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
@@ -33,8 +50,8 @@ const parseProblemDetail = async (response: Response): Promise<ProblemDetail | u
 
 const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
   const headers = new Headers(init?.headers);
-  if (init?.body !== undefined && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (init?.body !== undefined && !headers.has(HTTP_HEADER.CONTENT_TYPE)) {
+    headers.set(HTTP_HEADER.CONTENT_TYPE, CONTENT_TYPE_JSON);
   }
 
   const response = await fetch(url, {
@@ -58,22 +75,22 @@ export const createOrder = (
   customerId: string,
   items: readonly OrderLineItem[],
 ): Promise<OrderTransitionResponse> =>
-  requestJson<OrderTransitionResponse>("/api/orders", {
-    method: "POST",
+  requestJson<OrderTransitionResponse>(ORDERS_BASE_PATH, {
+    method: HTTP_METHOD.POST,
     body: JSON.stringify({ customerId, items }),
   });
 
 export const reserveOrder = (orderId: string): Promise<OrderTransitionResponse> =>
-  requestJson<OrderTransitionResponse>(`/api/orders/${encodeURIComponent(orderId)}/reserve`, {
-    method: "POST",
+  requestJson<OrderTransitionResponse>(orderPath(orderId, "reserve"), {
+    method: HTTP_METHOD.POST,
   });
 
 export const payOrder = (
   orderId: string,
   paymentMethod: PaymentMethod,
 ): Promise<OrderTransitionResponse> =>
-  requestJson<OrderTransitionResponse>(`/api/orders/${encodeURIComponent(orderId)}/pay`, {
-    method: "POST",
+  requestJson<OrderTransitionResponse>(orderPath(orderId, "pay"), {
+    method: HTTP_METHOD.POST,
     body: JSON.stringify({ paymentMethod }),
   });
 
@@ -81,18 +98,18 @@ export const shipOrder = (
   orderId: string,
   shippingMethod: ShippingMethod,
 ): Promise<OrderTransitionResponse> =>
-  requestJson<OrderTransitionResponse>(`/api/orders/${encodeURIComponent(orderId)}/ship`, {
-    method: "POST",
+  requestJson<OrderTransitionResponse>(orderPath(orderId, "ship"), {
+    method: HTTP_METHOD.POST,
     body: JSON.stringify({ shippingMethod }),
   });
 
 export const cancelOrder = (orderId: string, reason: string): Promise<OrderTransitionResponse> =>
-  requestJson<OrderTransitionResponse>(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
-    method: "POST",
+  requestJson<OrderTransitionResponse>(orderPath(orderId, "cancel"), {
+    method: HTTP_METHOD.POST,
     body: JSON.stringify({ reason }),
   });
 
 export const getOrder = (orderId: string): Promise<Order> =>
-  requestJson<Order>(`/api/orders/${encodeURIComponent(orderId)}`, {
-    method: "GET",
+  requestJson<Order>(orderPath(orderId), {
+    method: HTTP_METHOD.GET,
   });

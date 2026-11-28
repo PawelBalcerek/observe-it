@@ -26,6 +26,8 @@ storefront/src/
 - Share cross-feature data through URL routes, domain types and React Context in `src/lib/`, or providers mounted in
   `src/app/` rather than prop-drilling across routes.
 - Type React function components explicitly with `FC` / `FC<Props>`.
+- Group repeated protocol or domain literals in `as const` objects, and centralize cross-module subsystem constants
+  (such as `src/telemetry/config.ts`) instead of scattering top-level constants across files.
 
 ## 2. Semantic HTML & Accessible Locators
 
@@ -64,16 +66,18 @@ Colocate `*.test.ts` / `*.test.tsx` tests alongside the feature or module they v
 
 - **Explicit `// given`, `// when`, `// then`, `// and` comments**: Structure every `it(...)` test with `// given`,
   `// when`, `// then`, and optional `// and` blocks (mirroring `docs/agents/testing.md` §5).
-- **Reusable test fixtures (`src/test/`)**: Use minimal-override Object Mothers (`orderFixtures.ts`) and API fetch
-  fixtures (`observedAppApiFixture.ts`) rather than ad-hoc inline `fetch` mocks or repeated payload literals.
-- **Private render, interaction & expectation helpers**: Keep each UI test readable by extracting file-local arrow
-  helpers for rendering (`renderCartPage`), user interactions (`userClicksProceedToPayment`), and domain assertions
-  (`expectOrderState`, `expectAlert`).
+- **Reusable test fixtures (`src/test/`)**: Use minimal-override Object Mothers (`orderFixtures.ts`), API fetch fixtures
+  (`observedAppApiFixture.ts`), and global-stub fixtures (`consoleFixture.ts`) rather than ad-hoc inline `fetch` /
+  `vi.spyOn` mocks or repeated payload literals.
+- **Domain-named render, interaction & expectation helpers**: Keep UI and telemetry tests readable by extracting
+  file-local helpers (`renderCartPage`, `userClicksProceedToPayment`, `expectOrderState`, `expectAlert`) and
+  domain-named assertion methods on test harnesses (`InMemoryTelemetryHarness` `expect*` helpers) instead of repeating
+  multi-line raw `expect(...)` chains.
 - **Query like a user**: Prefer `getByRole`, `getByLabelText`, `findByText`, and `@testing-library/user-event` over DOM
   structure or CSS class assertions.
 - **Verify implemented behavior, not internals**: Assert rendered outcomes, navigation, API requests/responses, and
-  error handling rather than internal React state, implementation details, or the absence of unimplemented behavior
-  (such as negative "never does X" checks).
+  error handling rather than internal React state, static declarations/defaults, checks already enforced by
+  Biome/TypeScript, or the absence of unimplemented behavior ("never does X").
 - **In-memory telemetry assertions**: Verify custom spans, error capture, and `browser.web_vital` log records with
   OpenTelemetry in-memory exporters (`InMemorySpanExporter`, `InMemoryLogRecordExporter`) rather than mocking SDK
   internals.
