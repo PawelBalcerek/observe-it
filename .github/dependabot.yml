@@ -19,3 +19,28 @@ updates:
       # vitepress-plugin-mermaid peer dependency requires mermaid "10 || 11"
       - dependency-name: "mermaid"
         versions: [">= 12.0.0"]
+
+  - package-ecosystem: "npm"
+    directory: "/storefront"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/browser-traffic-generator"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/storefront"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/browser-traffic-generator"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"

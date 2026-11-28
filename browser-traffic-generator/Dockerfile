@@ -6,7 +6,7 @@ WORKDIR /app
 
 RUN npm install -g "pnpm@${PNPM_VERSION}"
 
-COPY package.json pnpm-lock.yaml tsconfig.json tsconfig.build.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.build.json ./
 RUN pnpm install --frozen-lockfile
 
 COPY src ./src

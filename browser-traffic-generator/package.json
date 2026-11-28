@@ -10,8 +10,9 @@
     "lint": "biome ci .",
     "format": "biome check --write .",
     "typecheck": "tsc --noEmit",
+    "dead-code": "knip",
     "test": "vitest run",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run dead-code && pnpm run test && pnpm run build"
   },
   "dependencies": {
     "playwright-core": "^1.65.1"
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.6.9",
     "@types/node": "^26.6.11",
+    "knip": "6.49.0",
     "typescript": "~7.0.2",
     "vitest": "^5.1.2"
   }

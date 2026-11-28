@@ -11,6 +11,28 @@ import {
   shipOrder,
 } from "./api.ts";
 
+const expectSingleJsonPost = (
+  api: ReturnType<typeof stubObservedAppApi>,
+  url: string,
+  body: unknown,
+): void => {
+  expect(api.requests()).toHaveLength(1);
+  const [request] = api.requests();
+  expect(request?.url).toBe(url);
+  expect(request?.method).toBe("POST");
+  expect(request?.headers.get("Content-Type")).toBe("application/json");
+  expect(request?.body).toEqual(body);
+};
+
+const expectApiError = (error: unknown, status: number, detail: string): void => {
+  expect(error).toBeInstanceOf(ApiError);
+  expect(error).toMatchObject({
+    name: "ApiError",
+    status,
+    detail,
+  });
+};
+
 describe("Observed App API client", () => {
   it("creates an order with line items", async () => {
     // given
@@ -24,12 +46,7 @@ describe("Observed App API client", () => {
     expect(response).toEqual({ orderId: "ord-1", state: "CREATED" });
 
     // and
-    expect(api.requests()).toHaveLength(1);
-    const [request] = api.requests();
-    expect(request?.url).toBe("/api/orders");
-    expect(request?.method).toBe("POST");
-    expect(request?.headers.get("Content-Type")).toBe("application/json");
-    expect(request?.body).toEqual({
+    expectSingleJsonPost(api, "/api/orders", {
       customerId: "cust-100",
       items: [lineItem],
     });
@@ -48,20 +65,10 @@ describe("Observed App API client", () => {
     const payError = await payOrder("ord-2", "TIMEOUT_GATEWAY").catch((caught: unknown) => caught);
 
     // then
-    expect(reserveError).toBeInstanceOf(ApiError);
-    expect(reserveError).toMatchObject({
-      name: "ApiError",
-      status: 422,
-      detail: outOfStockDetail,
-    });
+    expectApiError(reserveError, 422, outOfStockDetail);
 
     // and
-    expect(payError).toBeInstanceOf(ApiError);
-    expect(payError).toMatchObject({
-      name: "ApiError",
-      status: 504,
-      detail: timeoutDetail,
-    });
+    expectApiError(payError, 504, timeoutDetail);
   });
 
   it("calls pay, ship, cancel, and get endpoints with expected methods and payloads", async () => {

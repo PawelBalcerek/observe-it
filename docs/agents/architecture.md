@@ -143,7 +143,7 @@ Keep the qualifier where it carries meaning the bare name loses:
 - **Fix before suppressing**: Change the code to satisfy a Detekt finding; keep an `@Suppress` only when the rule cannot
   fit the case (e.g. a `when` over the open-ended `HttpStatusCode`), scoped to the smallest declaration.
 
-## 6. Dead Code, Dependency Versions & Sources
+## 6. Dead Code & KDoc Sources
 
 - **Every declaration and default parameter has a caller**: Each class, function, property, `@Bean`, and fixture helper
   a PR adds is called from `main` (or, for `testFixtures`, from a test) in the same PR, and every default parameter
@@ -153,14 +153,6 @@ Keep the qualifier where it carries meaning the bare name loses:
   without test-only default values (`= NoOp*`, `= ScenarioExecutionCounters()`, `= null`), and test doubles or no-op
   stubs live in `src/test` or `src/testFixtures` rather than `src/main`. Detekt catches unused *private* members; PR
   code review checks public and internal declarations and default parameter values for `main` callers.
-- **Latest stable versions on new dependencies & tooling**: Whenever adding a new dependency, plugin, container image,
-  or GitHub Action (`gradle/libs.versions.toml`, `package.json`, `Dockerfile` / `docker-compose.yml`,
-  `.github/workflows/*.yml`), query the live registry (`npm view <pkg> version`,
-  `gh api repos/<owner>/<repo>/releases/latest`, Maven Central, or Docker Hub) and pin the latest compatible stable
-  release rather than relying on pretraining memory. When a dependency cannot be updated to the latest major or stable
-  release due to an upstream incompatibility (e.g., `mermaid` 12.x vs. `vitepress-plugin-mermaid` peer constraint
-  `10 || 11`), pin the highest compatible release and record an `ignore` entry with an explanatory comment in
-  `.github/dependabot.yml`.
 - **KDoc cites verifiable sources**: KDoc explaining a non-trivial algorithm or framework mechanism (sampling, lifecycle
   phases, virtual threads) names the technique correctly and links a primary source (Javadoc, JEP, Spring reference,
   paper) by URL.

@@ -1,10 +1,9 @@
 # Browser Traffic Generator Conventions
 
-Applies to `browser-traffic-generator/` (standalone Node.js, TypeScript, `playwright-core`, Biome, and Vitest).
-Compiler strictness, lint rules, and formatting live in `browser-traffic-generator/tsconfig.json` and
-`browser-traffic-generator/biome.json` (mirror `storefront/biome.json`'s function-style and explicit-type rules when
-scaffolding); run `pnpm --dir browser-traffic-generator check` to verify types, linting, formatting, and unit tests
-before committing.
+Applies to `browser-traffic-generator/` (standalone Node.js, TypeScript, `playwright-core`, Biome, Knip, and Vitest).
+Compiler strictness, lint rules (including `@opentelemetry/*` import isolation), formatting, and dead-export checks live
+in `browser-traffic-generator/tsconfig.json`, `browser-traffic-generator/biome.json`, and
+`browser-traffic-generator/package.json`; run `pnpm --dir browser-traffic-generator check` before committing.
 
 ## 1. Standalone Package Layout
 
@@ -15,7 +14,6 @@ and build configuration—never coupled to `storefront/` via a shared `pnpm` wor
   (`getByRole`, `getByLabelText`).
 - Target `playwright-core` with `chromium-headless-shell` on Linux `amd64`/`arm64` so containers stay lightweight and
   support full Core Web Vitals (`LCP`, `INP`, `CLS`).
-- Keep every exported symbol used by a caller in `browser-traffic-generator/src/` (no dead exports).
 
 ## 2. Strictly Uninstrumented Invariant (`ADR-0015`)
 
@@ -52,14 +50,19 @@ Expose a lightweight server using Node's built-in `http` module on port `8082` (
 - `POST /pause` and `POST /resume`: Pause or resume background synthetic journeys during manual exploration.
 - `POST /trigger/{scenario}`: Deterministically trigger a single **Checkout Scenario** or `BROWSER_DIAGNOSTICS` journey
   (used by `:e2e:e2eTest` and manual testing), returning explicit 4xx JSON error responses for unknown scenario names.
+- Group repeated HTTP methods, status codes, headers, and route paths into `as const` constant objects (`HTTP_METHOD`,
+  `HTTP_STATUS`, `HTTP_HEADER`, `ROUTES`) rather than repeating raw literals inline.
 
 ## 5. Testing Conventions
 
 - **Explicit `// given`, `// when`, `// then`, `// and` comments**: Structure every `it(...)` test with `// given`,
   `// when`, `// then`, and optional `// and` blocks.
-- **Reusable test fixtures**: Extract Object Mother factories and HTTP/Playwright fakes into shared test fixtures
-  rather than repeating inline mocks or payload literals.
-- Keep unit tests fast and deterministic under Vitest: assert implemented behavior (skip negative "never does X"
-  checks), covering scenario weight sampling, control API HTTP routes, header attachment wiring, and `BrowserContext`
-  cleanup / periodic `Browser` recycle logic using in-memory fakes rather than launching real Chromium binaries.
+- **Reusable test fixtures & domain expectation helpers**: Extract Object Mother factories, HTTP/Playwright fakes
+  (`src/test/`), and domain-named `expect*` helpers (`expectBrowserSnapshots`, `expectResponse`, `expectStatus`,
+  `expectJourneySteps`) rather than repeating inline mocks, payload literals, or multi-line raw `expect(...)` chains.
+- **High-signal behavioral unit tests**: Keep unit tests fast and deterministic under Vitest; assert implemented
+  behavior (scenario weight distribution, control API routes, header attachment wiring, `BrowserContext` cleanup, and
+  periodic `Browser` recycle logic using in-memory fakes rather than launching real Chromium) and skip tests that
+  restate static declarations/defaults, duplicate Biome/TypeScript checks, or assert unimplemented behavior ("never does
+  X").
 - Fix the underlying type or lint issue before reaching for `biome-ignore`, `@ts-expect-error`, or `@ts-ignore`.
