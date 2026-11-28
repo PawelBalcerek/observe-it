@@ -134,7 +134,7 @@ services:
       - observe-it-net
 
   mongodb:
-    image: mongo:8.0.38
+    image: mongo:9.0.8
     container_name: mongodb
     command: ["mongod", "--wiredTigerCacheSizeGB", "0.25", "--bind_ip_all"]
     mem_limit: 512m
