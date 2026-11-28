@@ -33,7 +33,7 @@ services:
       - observe-it-net
 
   opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:3.9.0
+    image: opensearchproject/opensearch-dashboards:3.10.0
     container_name: opensearch-dashboards
     command: ["opensearch-dashboards", "-c", "/usr/share/opensearch-dashboards/config/observe-it.yml"]
     environment:
